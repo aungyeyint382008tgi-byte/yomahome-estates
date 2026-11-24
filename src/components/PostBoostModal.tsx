@@ -14,8 +14,8 @@ const TOWNSHIP_COORDS: Record<string, [number, number]> = {
 };
 
 // Replace with your real KBZPay / WavePay number before going live
-const MERCHANT_PHONE = '09-777-000-999';
-const MERCHANT_NAME = 'YomaHome Estates';
+const MERCHANT_PHONE = "09790553155";
+const MERCHANT_NAME = "Aung Ye Yint";
 const BOOST_PRICE_MMK = 25000;
 
 export default function PostBoostModal({
