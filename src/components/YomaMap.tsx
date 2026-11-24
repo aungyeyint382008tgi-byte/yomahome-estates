@@ -112,6 +112,9 @@ export default function YomaMap({
   const drawModeRef = useRef(drawMode);
   const onZoneDrawnRef = useRef(onZoneDrawn);
   const onClearZoneRef = useRef(onClearZone);
+  const activeZoneCenterRef = useRef<[number, number] | null>(null);
+  const activeZoneRadiusRef = useRef<number>(1500);
+  const lastZoneTapRef = useRef<number>(0);
 
   drawModeRef.current = drawMode;
   onZoneDrawnRef.current = onZoneDrawn;
@@ -279,7 +282,9 @@ export default function YomaMap({
       const zoneSrc = map.getSource('zone-source') as
         | maplibregl.GeoJSONSource
         | undefined;
-      zoneSrc?.setData(createCircleGeoJSON(e.lngLat.lng, e.lngLat.lat, radius));
+      activeZoneCenterRef.current = [e.lngLat.lng, e.lngLat.lat];
+        activeZoneRadiusRef.current = radius;
+        zoneSrc?.setData(createCircleGeoJSON(e.lngLat.lng, e.lngLat.lat, radius));
       onZoneDrawnRef.current(e.lngLat.lat, e.lngLat.lng, radius);
     });
 
@@ -342,7 +347,8 @@ export default function YomaMap({
     const zoneSrc = map.getSource('zone-source') as
       | maplibregl.GeoJSONSource
       | undefined;
-    zoneSrc?.setData(EMPTY_FC);
+    activeZoneCenterRef.current = null;
+      zoneSrc?.setData(EMPTY_FC);
   }, [activeZone, mapLoaded]);
 
   // Smoothly zoom to street level when a property is tapped
@@ -501,23 +507,6 @@ export default function YomaMap({
   return (
     <div className="relative isolate z-0 h-[440px] lg:h-[640px] w-full rounded-2xl overflow-hidden border border-slate-700/60 shadow-2xl bg-[#E5E3DF]">
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
-
-      {/* Draw Zone Status Banner */}
-      {drawMode && (
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 bg-white/95 border border-blue-200 text-slate-800 text-xs font-semibold pl-4 pr-2 py-1.5 rounded-full shadow-lg whitespace-nowrap">
-          <span>Tap map for 1.5 km zone</span>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onCancelDraw();
-            }}
-            className="px-2.5 py-1 rounded-full bg-rose-500 text-white font-semibold"
-          >
-            ✕ Cancel
-          </button>
-        </div>
-      )}
 
       {/* Google-style Road Route & Directions Card */}
       {!drawMode && selectedProp && (
