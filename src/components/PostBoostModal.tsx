@@ -40,51 +40,53 @@ export default function PostBoostModal({
   const [priceLakhs, setPriceLakhs] = useState('');
   const [beds, setBeds] = useState('2');
   const [baths, setBaths] = useState('2');
-  const [sqft, setSqft] = useState('1400');
-  const [floorLevel, setFloorLevel] = useState('8th Floor');
-  const [ownershipDoc, setOwnershipDoc] = useState('BCC Condo');
-  const [contactPhone, setContactPhone] = useState('+959');
+  const [sqft, setSqft] = useState('1200');
+  const [floorLevel, setFloorLevel] = useState('');
   const [backupPower, setBackupPower] = useState(true);
   const [hasElevator, setHasElevator] = useState(true);
-  const [ownerDirect, setOwnerDirect] = useState(true);
+  const [ownerDirect, setOwnerDirect] = useState(false);
   const [floodFree, setFloodFree] = useState(true);
+  const [ownershipDoc, setOwnershipDoc] = useState('');
+  const [contactPhone, setContactPhone] = useState('');
   const [photoFile, setPhotoFile] = useState<File | null>(null);
 
-  // Boost Request Form State
-  const [selectedPropId, setSelectedPropId] = useState(properties[0]?.id || '');
-  const [paymentMethod, setPaymentMethod] = useState<'KBZPay' | 'WavePay'>('KBZPay');
-  const [receiptFile, setReceiptFile] = useState<File | null>(null);
-  const [refCode] = useState(
-    () => `YOMA-${Math.floor(100000 + Math.random() * 900000)}`
+  // Boost Listing Form State
+  const [selectedPropId, setSelectedPropId] = useState<string>(
+    properties[0]?.id || ''
   );
+  const [paymentMethod, setPaymentMethod] = useState<'KBZPay' | 'WavePay'>('KBZPay');
+  const [refCode] = useState(() => 'YM' + Math.floor(100000 + Math.random() * 900000));
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
 
-  const uploadToBucket = async (file: File, folder: string) => {
+  const uploadToBucket = async (file: File, bucket: string): Promise<string> => {
     const ext = file.name.split('.').pop() || 'jpg';
-    const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const filePath = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
     const { error: uploadErr } = await supabase.storage
-      .from('property-media')
-      .upload(path, file, { upsert: false });
+      .from(bucket)
+      .upload(filePath, file, { cacheControl: '3600', upsert: false });
     if (uploadErr) throw uploadErr;
-
-    const { data } = supabase.storage.from('property-media').getPublicUrl(path);
+    const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
     return data.publicUrl;
   };
 
   const handlePostSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setSubmitting(true);
     setError(null);
     setSuccessMsg(null);
+    if (!title.trim() || !priceLakhs || !contactPhone.trim()) {
+      setError('Please fill in Property Title, Price (Lakhs), and Contact Phone.');
+      return;
+    }
 
+    setSubmitting(true);
     try {
       let imageUrl =
-        'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=900&q=80';
+        'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=900&q=80';
       if (photoFile) {
         imageUrl = await uploadToBucket(photoFile, 'listings');
       }
 
       const [baseLat, baseLng] = TOWNSHIP_COORDS[township] || [16.822, 96.15];
-      // Slight offset so new pins in the same township don't overlap directly
       const lat = baseLat + (Math.random() - 0.5) * 0.008;
       const lng = baseLng + (Math.random() - 0.5) * 0.008;
 
@@ -113,7 +115,7 @@ export default function PostBoostModal({
       setSuccessMsg('Listing published live on the Yangon map!');
       onSuccess();
       setTimeout(() => onClose(), 1200);
-    } catch (err) {
+    } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to publish listing.');
     } finally {
       setSubmitting(false);
@@ -122,26 +124,26 @@ export default function PostBoostModal({
 
   const handleBoostSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    setError(null);
+    setSuccessMsg(null);
     if (!selectedPropId) {
-      setError('Please select a property to boost.');
+      setError('Please select a listing to boost.');
       return;
     }
     if (!receiptFile) {
-      setError('Please upload your KBZPay or WavePay transfer screenshot.');
+      setError('Please upload your KBZPay / WavePay payment screenshot.');
       return;
     }
 
     setSubmitting(true);
-    setError(null);
-    setSuccessMsg(null);
-
     try {
-      const receiptUrl = await uploadToBucket(receiptFile, 'receipts');
+      const receiptUrl = await uploadToBucket(receiptFile, 'payment-receipts');
+
       const { error: boostErr } = await supabase.from('boost_requests').insert({
         property_id: selectedPropId,
-        reference_code: refCode,
         payment_method: paymentMethod,
         amount_mmk: BOOST_PRICE_MMK,
+        reference_code: refCode,
         receipt_url: receiptUrl,
         status: 'pending',
       });
@@ -149,125 +151,137 @@ export default function PostBoostModal({
       if (boostErr) throw boostErr;
 
       setSuccessMsg(
-        `Boost request ${refCode} received! Once verified, your listing turns Gold ★ Premier for 14 days.`
+        `Boost request (${refCode}) submitted! Our team will verify your ${paymentMethod} slip shortly.`
       );
-      setTimeout(() => onClose(), 2200);
-    } catch (err) {
+      setTimeout(() => onClose(), 1600);
+    } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to submit boost request.');
     } finally {
       setSubmitting(false);
     }
   };
 
+  const inputCls =
+    'w-full bg-[#151822] border border-[#D4AF37]/25 focus:border-[#D4AF37] rounded-xl px-3 py-2 text-xs text-[#F5F2EB] placeholder:text-[#7E7A70] outline-none transition';
+
   return (
     <div
+      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4"
       onClick={onClose}
-      className="fixed inset-0 z-[2000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 overflow-y-auto"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-3xl bg-[#0F131C] border border-amber-500/30 shadow-2xl text-slate-100 p-5 space-y-4"
+        className="w-full sm:max-w-lg max-h-[92dvh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-[#0E1017] border border-[#D4AF37]/30 p-5 sm:p-6 text-[#F5F2EB] shadow-[0_24px_80px_rgba(0,0,0,0.85)]"
       >
-        {/* Header & Tab Switcher */}
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setTab('post');
-                setError(null);
-                setSuccessMsg(null);
-              }}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
-                tab === 'post'
-                  ? 'bg-amber-400 text-[#0A0B0E]'
-                  : 'bg-[#161B26] text-slate-300 border border-slate-700'
-              }`}
-            >
-              + Post Property
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setTab('boost');
-                setError(null);
-                setSuccessMsg(null);
-              }}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
-                tab === 'boost'
-                  ? 'bg-gradient-to-r from-amber-300 to-amber-500 text-[#0A0B0E]'
-                  : 'bg-[#161B26] text-amber-300 border border-amber-500/40'
-              }`}
-            >
-              ★ Boost Ad (KBZPay / Wave)
-            </button>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-[#D4AF37] font-semibold">
+              YomaHome Concierge
+            </p>
+            <h2 className="font-luxury text-xl font-semibold text-[#FAF6EC] mt-0.5">
+              List or Boost an Estate
+            </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="h-8 w-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold"
+            className="w-8 h-8 rounded-full bg-[#161923] border border-white/10 text-[#ABA599] hover:text-white flex items-center justify-center text-sm"
+            aria-label="Close"
           >
             ✕
           </button>
         </div>
 
+        {/* Mode Switcher Tabs */}
+        <div className="grid grid-cols-2 gap-2 bg-[#141720] border border-white/10 p-1 rounded-2xl mb-4">
+          <button
+            type="button"
+            onClick={() => {
+              setTab('post');
+              setError(null);
+              setSuccessMsg(null);
+            }}
+            className={`py-2 rounded-xl text-xs font-semibold transition ${
+              tab === 'post'
+                ? 'gold-gradient'
+                : 'text-[#ABA599] hover:text-[#F5F2EB]'
+            }`}
+          >
+            + Post Property
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setTab('boost');
+              setError(null);
+              setSuccessMsg(null);
+            }}
+            className={`py-2 rounded-xl text-xs font-semibold transition ${
+              tab === 'boost'
+                ? 'gold-gradient'
+                : 'text-[#ABA599] hover:text-[#F5F2EB]'
+            }`}
+          >
+            ★ Boost ({BOOST_PRICE_MMK.toLocaleString()} Ks)
+          </button>
+        </div>
+
         {error && (
-          <div className="rounded-xl bg-rose-950/50 border border-rose-500/50 p-3 text-xs text-rose-200">
+          <div className="mb-3 p-3 rounded-xl bg-red-950/45 border border-red-400/35 text-red-200 text-xs">
             {error}
           </div>
         )}
-
         {successMsg && (
-          <div className="rounded-xl bg-emerald-950/50 border border-emerald-500/50 p-3 text-xs text-emerald-200 font-semibold">
-            ✓ {successMsg}
+          <div className="mb-3 p-3 rounded-xl bg-emerald-950/45 border border-emerald-400/35 text-emerald-200 text-xs">
+            {successMsg}
           </div>
         )}
 
         {tab === 'post' ? (
           <form onSubmit={handlePostSubmit} className="space-y-3 text-xs">
             <div>
-              <label className="block text-slate-400 mb-1">Property Title *</label>
+              <label className="block text-[#ABA599] mb-1">Property Title *</label>
               <input
                 required
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Golden Valley Luxury 3BR Condo"
-                className="w-full bg-[#151B28] border border-slate-700 rounded-xl px-3 py-2 text-slate-100 outline-none focus:border-amber-400"
+                className={inputCls}
               />
             </div>
 
             <div className="grid grid-cols-3 gap-2.5">
               <div>
-                <label className="block text-slate-400 mb-1">Mode</label>
+                <label className="block text-[#ABA599] mb-1">Mode</label>
                 <select
                   value={mode}
                   onChange={(e) => setMode(e.target.value as 'rent' | 'buy')}
-                  className="w-full bg-[#151B28] border border-slate-700 rounded-xl px-2.5 py-2 text-slate-100"
+                  className={inputCls}
                 >
                   <option value="rent">For Rent</option>
                   <option value="buy">For Buy</option>
                 </select>
               </div>
               <div>
-                <label className="block text-slate-400 mb-1">Type</label>
+                <label className="block text-[#ABA599] mb-1">Type</label>
                 <select
                   value={propertyType}
                   onChange={(e) => setPropertyType(e.target.value)}
-                  className="w-full bg-[#151B28] border border-slate-700 rounded-xl px-2.5 py-2 text-slate-100"
+                  className={inputCls}
                 >
                   <option value="Condo">Condo</option>
                   <option value="Penthouse">Penthouse</option>
                   <option value="Villa">Villa</option>
-                  <option value="Apartment">Apartment</option>
+                  <option value="House">House</option>
                 </select>
               </div>
               <div>
-                <label className="block text-slate-400 mb-1">Township</label>
+                <label className="block text-[#ABA599] mb-1">Township</label>
                 <select
                   value={township}
                   onChange={(e) => setTownship(e.target.value)}
-                  className="w-full bg-[#151B28] border border-slate-700 rounded-xl px-2.5 py-2 text-slate-100"
+                  className={inputCls}
                 >
                   {Object.keys(TOWNSHIP_COORDS).map((t) => (
                     <option key={t} value={t}>
@@ -278,207 +292,204 @@ export default function PostBoostModal({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <div className="grid grid-cols-4 gap-2">
               <div>
-                <label className="block text-slate-400 mb-1">Price (Lakhs) *</label>
+                <label className="block text-[#ABA599] mb-1">Price (Lakhs) *</label>
                 <input
                   required
                   type="number"
-                  min={1}
+                  min="1"
+                  step="any"
                   value={priceLakhs}
                   onChange={(e) => setPriceLakhs(e.target.value)}
                   placeholder="25"
-                  className="w-full bg-[#151B28] border border-slate-700 rounded-xl px-3 py-2 text-slate-100"
+                  className={inputCls}
                 />
               </div>
               <div>
-                <label className="block text-slate-400 mb-1">Beds</label>
+                <label className="block text-[#ABA599] mb-1">Beds</label>
                 <input
                   type="number"
-                  min={1}
+                  min="0"
                   value={beds}
                   onChange={(e) => setBeds(e.target.value)}
-                  className="w-full bg-[#151B28] border border-slate-700 rounded-xl px-3 py-2 text-slate-100"
+                  className={inputCls}
                 />
               </div>
               <div>
-                <label className="block text-slate-400 mb-1">Baths</label>
+                <label className="block text-[#ABA599] mb-1">Baths</label>
                 <input
                   type="number"
-                  min={1}
+                  min="0"
                   value={baths}
                   onChange={(e) => setBaths(e.target.value)}
-                  className="w-full bg-[#151B28] border border-slate-700 rounded-xl px-3 py-2 text-slate-100"
+                  className={inputCls}
                 />
               </div>
               <div>
-                <label className="block text-slate-400 mb-1">Sqft</label>
+                <label className="block text-[#ABA599] mb-1">Sqft</label>
                 <input
                   type="number"
-                  min={200}
+                  min="100"
                   value={sqft}
                   onChange={(e) => setSqft(e.target.value)}
-                  className="w-full bg-[#151B28] border border-slate-700 rounded-xl px-3 py-2 text-slate-100"
+                  className={inputCls}
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-2 gap-2.5">
               <div>
-                <label className="block text-slate-400 mb-1">Contact Phone *</label>
+                <label className="block text-[#ABA599] mb-1">Floor Level</label>
+                <input
+                  type="text"
+                  value={floorLevel}
+                  onChange={(e) => setFloorLevel(e.target.value)}
+                  placeholder="e.g. 8th Floor"
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className="block text-[#ABA599] mb-1">
+                  Contact Phone / Telegram *
+                </label>
                 <input
                   required
                   type="text"
                   value={contactPhone}
                   onChange={(e) => setContactPhone(e.target.value)}
-                  placeholder="+959..."
-                  className="w-full bg-[#151B28] border border-slate-700 rounded-xl px-3 py-2 text-slate-100"
-                />
-              </div>
-              <div>
-                <label className="block text-slate-400 mb-1">Floor Level</label>
-                <input
-                  type="text"
-                  value={floorLevel}
-                  onChange={(e) => setFloorLevel(e.target.value)}
-                  placeholder="e.g. 12th Floor"
-                  className="w-full bg-[#151B28] border border-slate-700 rounded-xl px-3 py-2 text-slate-100"
-                />
-              </div>
-              <div>
-                <label className="block text-slate-400 mb-1">Ownership Doc</label>
-                <input
-                  type="text"
-                  value={ownershipDoc}
-                  onChange={(e) => setOwnershipDoc(e.target.value)}
-                  placeholder="BCC / Grant Land"
-                  className="w-full bg-[#151B28] border border-slate-700 rounded-xl px-3 py-2 text-slate-100"
+                  placeholder="+959777123456"
+                  className={inputCls}
                 />
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-4 py-1 text-slate-300">
-              <label className="flex items-center gap-1.5 cursor-pointer">
+            <div>
+              <label className="block text-[#ABA599] mb-1">
+                Ownership / Title Doc (Optional)
+              </label>
+              <input
+                type="text"
+                value={ownershipDoc}
+                onChange={(e) => setOwnershipDoc(e.target.value)}
+                placeholder="e.g. Strata / Grant / Owner Contract"
+                className={inputCls}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-1 text-[#D8D2C5]">
+              <label className="flex items-center gap-2 bg-[#141720] border border-white/10 p-2.5 rounded-xl cursor-pointer">
                 <input
                   type="checkbox"
                   checked={backupPower}
                   onChange={(e) => setBackupPower(e.target.checked)}
-                  className="accent-amber-400"
+                  className="accent-[#D4AF37]"
                 />
-                ⚡ 24/7 Power
+                <span>24/7 Backup Power</span>
               </label>
-              <label className="flex items-center gap-1.5 cursor-pointer">
+              <label className="flex items-center gap-2 bg-[#141720] border border-white/10 p-2.5 rounded-xl cursor-pointer">
                 <input
                   type="checkbox"
                   checked={hasElevator}
                   onChange={(e) => setHasElevator(e.target.checked)}
-                  className="accent-amber-400"
+                  className="accent-[#D4AF37]"
                 />
-                Elevator
+                <span>Elevator / Lift</span>
               </label>
-              <label className="flex items-center gap-1.5 cursor-pointer">
+              <label className="flex items-center gap-2 bg-[#141720] border border-white/10 p-2.5 rounded-xl cursor-pointer">
                 <input
                   type="checkbox"
                   checked={ownerDirect}
                   onChange={(e) => setOwnerDirect(e.target.checked)}
-                  className="accent-amber-400"
+                  className="accent-[#D4AF37]"
                 />
-                Owner Direct
+                <span>Owner Direct</span>
               </label>
-              <label className="flex items-center gap-1.5 cursor-pointer">
+              <label className="flex items-center gap-2 bg-[#141720] border border-white/10 p-2.5 rounded-xl cursor-pointer">
                 <input
                   type="checkbox"
                   checked={floodFree}
                   onChange={(e) => setFloodFree(e.target.checked)}
-                  className="accent-amber-400"
+                  className="accent-[#D4AF37]"
                 />
-                Flood-Free
+                <span>Flood-Free Zone</span>
               </label>
             </div>
 
             <div>
-              <label className="block text-slate-400 mb-1">
-                Property Photo (optional — uploads to Supabase Storage)
+              <label className="block text-[#ABA599] mb-1">
+                Property Photo (Optional — defaults to sample photo)
               </label>
               <input
                 type="file"
                 accept="image/*"
                 onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
-                className="w-full text-slate-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-slate-800 file:text-amber-300 file:font-semibold"
+                className="w-full text-[#C9C3B4] file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-[#D4AF37]/40 file:bg-[#1D1910] file:text-[#F3D58D] file:font-semibold"
               />
             </div>
 
             <button
               type="submit"
               disabled={submitting}
-              className="w-full py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-[#0A0B0E] font-extrabold text-xs transition disabled:opacity-60"
+              className="w-full py-3 rounded-xl gold-gradient text-xs sm:text-sm font-semibold shadow-[0_8px_24px_rgba(212,175,55,0.28)] transition disabled:opacity-60"
             >
-              {submitting ? 'Publishing to Yangon Map...' : 'Publish Listing Free'}
+              {submitting ? 'Publishing Listing...' : 'Publish Listing'}
             </button>
           </form>
         ) : (
-          <form onSubmit={handleBoostSubmit} className="space-y-4 text-xs">
-            <div className="rounded-2xl bg-gradient-to-br from-amber-500/15 to-yellow-900/10 border border-amber-400/40 p-4 space-y-1.5">
-              <p className="text-amber-300 font-extrabold text-sm">
-                ★ Premier Featured Placement — {BOOST_PRICE_MMK.toLocaleString()} MMK / 14 Days
-              </p>
-              <p className="text-slate-300">
-                Pins your listing to the top of the feed with a Gold ★ Map Pin so Yangon
-                buyers & expat renters see it first.
-              </p>
-            </div>
-
+          <form onSubmit={handleBoostSubmit} className="space-y-3.5 text-xs">
             <div>
-              <label className="block text-slate-400 mb-1">Select Listing to Boost</label>
+              <label className="block text-[#ABA599] mb-1">Select Listing to Boost</label>
               <select
                 value={selectedPropId}
                 onChange={(e) => setSelectedPropId(e.target.value)}
-                className="w-full bg-[#151B28] border border-slate-700 rounded-xl px-3 py-2.5 text-slate-100"
+                className={inputCls}
               >
                 {properties.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.title} ({p.township} • {Number(p.price_lakhs).toLocaleString()}L)
+                    {p.title} ({p.township} — {p.price_lakhs}L)
                   </option>
                 ))}
               </select>
             </div>
 
-            <div className="grid grid-cols-2 gap-2.5">
-              {(['KBZPay', 'WavePay'] as const).map((method) => (
-                <button
-                  key={method}
-                  type="button"
-                  onClick={() => setPaymentMethod(method)}
-                  className={`py-2.5 rounded-xl font-bold border transition ${
-                    paymentMethod === method
-                      ? 'bg-amber-400 text-[#0A0B0E] border-amber-300'
-                      : 'bg-[#151B28] text-slate-300 border-slate-700'
-                  }`}
-                >
-                  {method}
-                </button>
-              ))}
+            <div>
+              <label className="block text-[#ABA599] mb-1">Payment Wallet</label>
+              <div className="grid grid-cols-2 gap-2">
+                {(['KBZPay', 'WavePay'] as const).map((wallet) => (
+                  <button
+                    key={wallet}
+                    type="button"
+                    onClick={() => setPaymentMethod(wallet)}
+                    className={`py-2.5 rounded-xl font-semibold border transition ${
+                      paymentMethod === wallet
+                        ? 'bg-[#D4AF37]/15 border-[#D4AF37] text-[#F5E6B3]'
+                        : 'bg-[#141720] border-white/10 text-[#ABA599]'
+                    }`}
+                  >
+                    {wallet}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div className="rounded-xl bg-[#151B28] border border-slate-700 p-3.5 space-y-1">
-              <p className="text-slate-400">
-                1. Transfer <strong className="text-amber-300">25,000 MMK</strong> via{' '}
-                <strong className="text-white">{paymentMethod}</strong> to:
+            <div className="p-3.5 rounded-2xl bg-[#16130C] border border-[#D4AF37]/30 space-y-1.5">
+              <p className="text-[#F3D58D] font-semibold">
+                1. Transfer {BOOST_PRICE_MMK.toLocaleString()} MMK via {paymentMethod}
               </p>
-              <p className="text-base font-extrabold text-white tracking-wide">
-                {MERCHANT_PHONE}{' '}
-                <span className="text-xs font-normal text-slate-400">
-                  ({MERCHANT_NAME})
-                </span>
+              <p className="text-[#C9C3B4]">
+                Account:{' '}
+                <span className="font-mono text-[#FAF6EC]">{MERCHANT_PHONE}</span> (
+                {MERCHANT_NAME})
               </p>
-              <p className="text-slate-400 pt-1">
+              <p className="text-[#C9C3B4] pt-1">
                 2. Put Reference Code in transfer note:{' '}
-                <strong className="text-emerald-300">{refCode}</strong>
+                <strong className="text-emerald-300 font-mono">{refCode}</strong>
               </p>
             </div>
 
             <div>
-              <label className="block text-slate-400 mb-1">
+              <label className="block text-[#ABA599] mb-1">
                 3. Upload {paymentMethod} Transfer Screenshot *
               </label>
               <input
@@ -486,16 +497,18 @@ export default function PostBoostModal({
                 type="file"
                 accept="image/*"
                 onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
-                className="w-full text-slate-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-slate-800 file:text-amber-300 file:font-semibold"
+                className="w-full text-[#C9C3B4] file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-[#D4AF37]/40 file:bg-[#1D1910] file:text-[#F3D58D] file:font-semibold"
               />
             </div>
 
             <button
               type="submit"
               disabled={submitting}
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-300 to-amber-500 hover:from-amber-200 hover:to-amber-400 text-[#0A0B0E] font-extrabold text-xs transition disabled:opacity-60"
+              className="w-full py-3 rounded-xl gold-gradient text-xs sm:text-sm font-semibold shadow-[0_8px_24px_rgba(212,175,55,0.28)] transition disabled:opacity-60"
             >
-              {submitting ? 'Submitting Receipt...' : `Submit ${paymentMethod} Boost Request`}
+              {submitting
+                ? 'Submitting Receipt...'
+                : `Submit ${paymentMethod} Boost Request`}
             </button>
           </form>
         )}

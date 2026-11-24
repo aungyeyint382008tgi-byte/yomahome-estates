@@ -111,9 +111,11 @@ export default function YomaMap({
   const textLabelStylesRef = useRef<SavedLabelStyle[]>([]);
   const drawModeRef = useRef(drawMode);
   const onZoneDrawnRef = useRef(onZoneDrawn);
+  const onClearZoneRef = useRef(onClearZone);
 
   drawModeRef.current = drawMode;
   onZoneDrawnRef.current = onZoneDrawn;
+  onClearZoneRef.current = onClearZone;
 
   const selectedProp = properties.find((p) => p.id === selectedId) ?? null;
 
@@ -513,23 +515,6 @@ export default function YomaMap({
             className="px-2.5 py-1 rounded-full bg-rose-500 text-white font-semibold"
           >
             ✕ Cancel
-          </button>
-        </div>
-      )}
-
-      {/* Active Zone Clear Banner */}
-      {!drawMode && activeZone && !selectedProp && (
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 bg-white/95 border border-blue-300 text-blue-700 text-xs font-semibold pl-4 pr-2 py-1.5 rounded-full shadow-lg whitespace-nowrap">
-          <span>1.5 km Zone Active</span>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onClearZone();
-            }}
-            className="px-2.5 py-1 rounded-full bg-rose-500 text-white font-semibold"
-          >
-            ✕ Clear
           </button>
         </div>
       )}
