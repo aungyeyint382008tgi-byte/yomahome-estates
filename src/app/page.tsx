@@ -362,7 +362,7 @@ export default function HomePage() {
           <div className="absolute top-3 left-3 right-3 z-[400] flex items-center justify-between gap-2 pointer-events-none">
             {!showPostModal && (
   <div className="flex items-center gap-2 pointer-events-auto">
-              <button
+              {!showPostModal && (<button
                 type="button"
                 onClick={() => {
                   if (activeZone) {
@@ -382,19 +382,19 @@ export default function HomePage() {
                   <circle cx="12" cy="12" r="2.5" />
                 </svg>
                 {activeZone ? 'Clear Zone' : drawMode ? 'Drawing Zone...' : 'Draw Zone'}
-              </button>
+              </button>)}
 
-              <button
+              {!showPostModal && (<button
                 type="button"
                 onClick={() => setShowFilters(true)}
                 className="luxury-glass px-3 py-2 rounded-full text-xs font-medium text-[#E7E2D6] hover:border-[#D4AF37]/60 transition shadow-lg"
               >
                 {mode === 'all' ? 'All Modes' : mode === 'rent' ? 'For Rent' : 'For Buy'}
-              </button>
+              </button>)}
             </div>
 )}
 
-            <button
+            {!showPostModal && (<button
               type="button"
               onClick={() => {
                 setMobileTab('home');
@@ -408,7 +408,7 @@ export default function HomePage() {
                 <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
               </svg>
               AI Search
-            </button>
+            </button>)}
           </div>
 
                 <YomaMap
@@ -443,7 +443,7 @@ export default function HomePage() {
                     <h3 className="font-luxury text-sm font-semibold text-[#F8F3E6] truncate">
                       {selected.title}
                     </h3>
-                    <button
+                    {!showPostModal && (<button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -453,7 +453,7 @@ export default function HomePage() {
                       aria-label="Close preview"
                     >
                       ✕
-                    </button>
+                    </button>)}
                   </div>
                   <p className="text-xs font-semibold text-[#F3D58D] mt-0.5">
                     {formatPrice(selected)} • {selected.sqft.toLocaleString()} sqft
@@ -503,13 +503,13 @@ export default function HomePage() {
                   placeholder='Try: "3 bed Bahan condo under 40L"'
                   className="flex-1 bg-transparent text-sm text-[#F5F2EB] placeholder:text-[#7E7A70] focus:outline-none min-w-0"
                 />
-                <button
+                {!showPostModal && (<button
                   type="submit"
                   disabled={aiLoading}
                   className="gold-gradient px-3.5 py-1.5 rounded-full text-xs font-semibold tracking-wide shrink-0 disabled:opacity-60 transition"
                 >
                   {aiLoading ? 'Thinking...' : 'AI Search'}
-                </button>
+                </button>)}
               </form>
 
               {/* Category Icon Chips */}
