@@ -280,10 +280,20 @@ export default function HomePage() {
       {/* Top Luxury Brand Bar */}
       <header className="sticky top-0 z-30 luxury-glass border-x-0 border-t-0 px-4 lg:px-6 py-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-xl border border-[#D4AF37]/50 bg-gradient-to-br from-[#231F16] via-[#121318] to-[#0B0C10] flex items-center justify-center shadow-[0_0_20px_rgba(212,175,55,0.18)] shrink-0">
-            <span className="font-luxury text-xl font-bold gold-text leading-none">
-              Y
-            </span>
+          <div className="w-11 h-11 rounded-xl border border-[#D4AF37]/55 bg-gradient-to-br from-[#1F1B12] via-[#111319] to-[#090A0E] flex items-center justify-center shadow-[0_0_24px_rgba(212,175,55,0.22)] shrink-0 relative overflow-hidden">
+            <svg className="w-8 h-8" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="yomaDiamondGold" x1="6" y1="4" x2="34" y2="36" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stopColor="#F8E3B0" />
+                  <stop offset="55%" stopColor="#D4AF37" />
+                  <stop offset="100%" stopColor="#9A7222" />
+                </linearGradient>
+              </defs>
+              <path d="M20 4L21.5 9.5H23.5V12H16.5V9.5H18.5L20 4Z" fill="url(#yomaDiamondGold)" />
+              <path d="M16.5 10.5L6.5 20.5L20 34L33.5 20.5L23.5 10.5" stroke="url(#yomaDiamondGold)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M14.5 14.5L9.5 20.5L20 31L30.5 20.5L25.5 14.5" stroke="url(#yomaDiamondGold)" strokeWidth="1" strokeOpacity="0.65" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M14.5 16L20 22.5L25.5 16M20 22.5V28.5M17 28.5H23" stroke="url(#yomaDiamondGold)" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </div>
           <div className="min-w-0">
             <h1 className="font-luxury text-sm sm:text-base tracking-[0.14em] uppercase text-[#F5E6B3] truncate">
@@ -389,7 +399,7 @@ export default function HomePage() {
                 const input = document.getElementById('yoma-ai-input');
                 input?.focus();
               }}
-              className="pointer-events-auto gold-gradient px-3.5 py-2 rounded-full text-xs font-semibold flex items-center gap-1.5 shadow-[0_6px_20px_rgba(212,175,55,0.32)]"
+              className="lg:hidden pointer-events-auto gold-gradient px-3.5 py-2 rounded-full text-xs font-semibold flex items-center gap-1.5 shadow-[0_6px_20px_rgba(212,175,55,0.32)]"
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="11" cy="11" r="7" />
