@@ -19,35 +19,87 @@ interface AiFilters {
   summary: string;
 }
 
+type CategoryKey = 'all' | 'villa' | 'penthouse' | 'condo' | 'house';
+type MobileTab = 'home' | 'map' | 'saved';
+
+const CATEGORIES: { key: CategoryKey; label: string }[] = [
+  { key: 'all', label: 'All Estates' },
+  { key: 'villa', label: 'Villas' },
+  { key: 'penthouse', label: 'Penthouses' },
+  { key: 'condo', label: 'Condos' },
+  { key: 'house', label: 'Residences' },
+];
+
 export default function HomePage() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Core filters
   const [mode, setMode] = useState<'all' | 'rent' | 'buy'>('all');
+  const [category, setCategory] = useState<CategoryKey>('all');
   const [onlyGenerator, setOnlyGenerator] = useState(false);
   const [onlyOwner, setOnlyOwner] = useState(false);
+  const [onlyElevator, setOnlyElevator] = useState(false);
+  const [onlyFloodFree, setOnlyFloodFree] = useState(false);
+  const [minBeds, setMinBeds] = useState(0);
+  const [maxPriceLakhs, setMaxPriceLakhs] = useState(0);
+
+  // Map & Modals
   const [drawMode, setDrawMode] = useState(false);
   const [activeZone, setActiveZone] = useState(false);
   const [selected, setSelected] = useState<Property | null>(null);
   const [detailProp, setDetailProp] = useState<Property | null>(null);
   const [showPostModal, setShowPostModal] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
 
-  // Search & Gemini AI State
+  // AI Search
   const [searchText, setSearchText] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiFilters, setAiFilters] = useState<AiFilters | null>(null);
 
+  // Navigation & Saved Favorites
+  const [mobileTab, setMobileTab] = useState<MobileTab>('home');
+  const [showSavedOnly, setShowSavedOnly] = useState(false);
+  const [savedIds, setSavedIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('yomahome_saved_ids');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) setSavedIds(parsed);
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, []);
+
+  const toggleSave = (id: string) => {
+    setSavedIds((prev) => {
+      const next = prev.includes(id)
+        ? prev.filter((item) => item !== id)
+        : [...prev, id];
+      try {
+        localStorage.setItem('yomahome_saved_ids', JSON.stringify(next));
+      } catch {
+        // ignore storage errors
+      }
+      return next;
+    });
+  };
+
   const loadAllProperties = useCallback(async () => {
     setLoading(true);
     setErrorMsg(null);
-    setDrawMode(false);
     setActiveZone(false);
+    setDrawMode(false);
     const { data, error } = await supabase.rpc('get_properties');
     if (error) {
       setErrorMsg(error.message);
     } else if (data) {
-      setProperties(data);
+      setProperties(data as Property[]);
     }
     setLoading(false);
   }, []);
@@ -55,6 +107,16 @@ export default function HomePage() {
   useEffect(() => {
     loadAllProperties();
   }, [loadAllProperties]);
+
+  // Force map resize when switching to Map tab on mobile
+  useEffect(() => {
+    if (mobileTab === 'map') {
+      const timer = setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+      }, 80);
+      return () => clearTimeout(timer);
+    }
+  }, [mobileTab]);
 
   const handleZoneDrawn = useCallback(
     async (lat: number, lng: number, radiusMeters: number) => {
@@ -70,21 +132,21 @@ export default function HomePage() {
       if (error) {
         setErrorMsg(error.message);
       } else if (data) {
-        setProperties(data);
+        setProperties(data as Property[]);
       }
       setLoading(false);
     },
     []
   );
 
-  const runAiSearch = async (e?: FormEvent) => {
-    e?.preventDefault();
+  const handleAiSearch = async (e: FormEvent) => {
+    e.preventDefault();
     const q = searchText.trim();
     if (!q) {
-      clearAiSearch();
+      setAiFilters(null);
+      setAiError(null);
       return;
     }
-
     setAiLoading(true);
     setAiError(null);
     try {
@@ -99,50 +161,79 @@ export default function HomePage() {
         setAiLoading(false);
         return;
       }
-
       setMode(data.mode || 'all');
       setOnlyGenerator(Boolean(data.only_generator));
       setOnlyOwner(Boolean(data.only_owner));
       setAiFilters({
         township: data.township || '',
         property_type: data.property_type || '',
-        max_price_lakhs: Number(data.max_price_lakhs) || 0,
-        min_price_lakhs: Number(data.min_price_lakhs) || 0,
-        min_beds: Number(data.min_beds) || 0,
+        max_price_lakhs: Number(data.max_price_lakhs || 0),
+        min_price_lakhs: Number(data.min_price_lakhs || 0),
+        min_beds: Number(data.min_beds || 0),
         flood_free: Boolean(data.flood_free),
         summary: data.summary || q,
       });
     } catch {
-      setAiError('Could not reach AI search API.');
+      setAiError('Unable to reach AI Search. Please try again.');
     } finally {
       setAiLoading(false);
     }
   };
 
-  const clearAiSearch = () => {
+  const resetAllFilters = () => {
     setAiFilters(null);
     setAiError(null);
     setSearchText('');
     setMode('all');
+    setCategory('all');
     setOnlyGenerator(false);
     setOnlyOwner(false);
+    setOnlyElevator(false);
+    setOnlyFloodFree(false);
+    setMinBeds(0);
+    setMaxPriceLakhs(0);
+    setShowSavedOnly(false);
+    if (activeZone) {
+      loadAllProperties();
+    }
   };
+
+  const activeFilterCount =
+    (mode !== 'all' ? 1 : 0) +
+    (category !== 'all' ? 1 : 0) +
+    (onlyGenerator ? 1 : 0) +
+    (onlyOwner ? 1 : 0) +
+    (onlyElevator ? 1 : 0) +
+    (onlyFloodFree ? 1 : 0) +
+    (minBeds > 0 ? 1 : 0) +
+    (maxPriceLakhs > 0 ? 1 : 0);
 
   const filtered = properties.filter((p) => {
     if (mode !== 'all' && p.mode !== mode) return false;
     if (onlyGenerator && !p.backup_power) return false;
     if (onlyOwner && !p.owner_direct) return false;
+    if (onlyElevator && !p.has_elevator) return false;
+    if (onlyFloodFree && !p.flood_free) return false;
+    if (minBeds > 0 && Number(p.beds) < minBeds) return false;
+    if (maxPriceLakhs > 0 && Number(p.price_lakhs) > maxPriceLakhs) return false;
+
+    if (category !== 'all') {
+      const pType = (p.property_type || '').toLowerCase();
+      if (!pType.includes(category)) return false;
+    }
 
     if (aiFilters) {
       if (
         aiFilters.township &&
-        !p.township.toLowerCase().includes(aiFilters.township.toLowerCase())
+        !(p.township || '')
+          .toLowerCase()
+          .includes(aiFilters.township.toLowerCase())
       ) {
         return false;
       }
       if (
         aiFilters.property_type &&
-        !p.property_type
+        !(p.property_type || '')
           .toLowerCase()
           .includes(aiFilters.property_type.toLowerCase())
       ) {
@@ -160,131 +251,154 @@ export default function HomePage() {
       ) {
         return false;
       }
-      if (aiFilters.min_beds > 0 && p.beds < aiFilters.min_beds) {
+      if (aiFilters.min_beds > 0 && Number(p.beds) < aiFilters.min_beds) {
         return false;
       }
       if (aiFilters.flood_free && !p.flood_free) {
         return false;
       }
-    } else if (searchText.trim()) {
-      const q = searchText.toLowerCase();
-      const match =
-        p.title.toLowerCase().includes(q) ||
-        p.township.toLowerCase().includes(q) ||
-        p.property_type.toLowerCase().includes(q);
-      if (!match) return false;
     }
+
     return true;
   });
 
+  const savedProperties = properties.filter((p) => savedIds.includes(p.id));
+  const displayedListings =
+    mobileTab === 'saved'
+      ? savedProperties
+      : showSavedOnly
+      ? filtered.filter((p) => savedIds.includes(p.id))
+      : filtered;
+
+  const formatPrice = (p: Property) => {
+    const num = Number(p.price_lakhs || 0).toLocaleString();
+    return p.mode === 'rent' ? `${num} Lakhs / mo` : `${num} Lakhs MMK`;
+  };
+
   return (
-    <main className="min-h-screen bg-[#0A0B0E] text-slate-100">
-      <header className="sticky top-0 z-[1000] bg-[#0A0B0E]/95 backdrop-blur-md border-b border-amber-500/20 px-4 py-3.5">
-        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-amber-300 via-amber-500 to-yellow-700 flex items-center justify-center text-[#0A0B0E] font-black text-lg shadow-lg">
+    <main className="min-h-dvh lg:h-dvh flex flex-col bg-[#0B0C10] text-[#F5F2EB] lg:overflow-hidden">
+      {/* Top Luxury Brand Bar */}
+      <header className="sticky top-0 z-30 luxury-glass border-x-0 border-t-0 px-4 lg:px-6 py-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl border border-[#D4AF37]/50 bg-gradient-to-br from-[#231F16] via-[#121318] to-[#0B0C10] flex items-center justify-center shadow-[0_0_20px_rgba(212,175,55,0.18)] shrink-0">
+            <span className="font-luxury text-xl font-bold gold-text leading-none">
               Y
-            </div>
-            <div>
-              <h1 className="text-base font-bold tracking-wide text-amber-200">
-                YOMAHOME <span className="text-amber-400 font-light">ESTATES</span>
-              </h1>
-              <p className="text-[11px] text-slate-400">Yangon Curated Real Estate</p>
-            </div>
+            </span>
           </div>
+          <div className="min-w-0">
+            <h1 className="font-luxury text-sm sm:text-base tracking-[0.14em] uppercase text-[#F5E6B3] truncate">
+              YomaHome Estates
+            </h1>
+            <p className="text-[11px] text-[#9A9589] tracking-wide truncate">
+              Yangon Curated Real Estate
+            </p>
+          </div>
+        </div>
 
-          {/* Gemini AI Natural-Language Search Bar */}
-          <form
-            onSubmit={runAiSearch}
-            className="flex-1 max-w-lg min-w-[230px] flex items-center gap-1.5 bg-[#131720] border border-slate-700/80 focus-within:border-amber-400 rounded-xl p-1 pl-3"
+        {/* Desktop Quick Actions */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowSavedOnly((prev) => !prev)}
+            className={`hidden lg:inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-medium border transition ${
+              showSavedOnly
+                ? 'border-[#D4AF37] bg-[#D4AF37]/15 text-[#F5E6B3]'
+                : 'border-white/10 bg-[#141720] text-[#C9C3B4] hover:border-[#D4AF37]/40'
+            }`}
           >
-            <input
-              type="text"
-              value={searchText}
-              onChange={(e) => {
-                setSearchText(e.target.value);
-                if (aiFilters) setAiFilters(null);
-              }}
-              placeholder='Try: "3 bed Bahan condo under 40L with generator"'
-              className="flex-1 bg-transparent text-sm text-slate-100 placeholder-slate-500 outline-none min-w-0"
-            />
-            <button
-              type="submit"
-              disabled={aiLoading}
-              className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-300 to-amber-500 hover:from-amber-200 hover:to-amber-400 text-[#0A0B0E] text-xs font-extrabold whitespace-nowrap transition disabled:opacity-60"
-            >
-              {aiLoading ? 'Thinking...' : '✨ AI Search'}
-            </button>
-          </form>
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill={showSavedOnly ? '#D4AF37' : 'none'} stroke="currentColor" strokeWidth="1.8">
+              <path d="M12 21s-7-4.5-9.2-8.4C1.1 9.5 2.7 5.5 6.5 5.1c2.1-.2 4 1 5.5 2.7 1.5-1.7 3.4-2.9 5.5-2.7 3.8.4 5.4 4.4 3.7 7.5C19 16.5 12 21 12 21z" />
+            </svg>
+            Saved ({savedIds.length})
+          </button>
 
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            {(['all', 'rent', 'buy'] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setMode(m)}
-                className={`px-3 py-1.5 rounded-lg font-semibold uppercase tracking-wider transition ${
-                  mode === m
-                    ? 'bg-amber-400 text-[#0A0B0E]'
-                    : 'bg-[#131720] text-slate-300 border border-slate-800'
-                }`}
-              >
-                {m}
-              </button>
-            ))}
-
-            <button
-              type="button"
-              onClick={() => setOnlyGenerator(!onlyGenerator)}
-              className={`px-3 py-1.5 rounded-lg font-medium border transition ${
-                onlyGenerator
-                  ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300'
-                  : 'bg-[#131720] border-slate-800 text-slate-300'
-              }`}
-            >
-              ⚡ 24/7 Power
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setOnlyOwner(!onlyOwner)}
-              className={`px-3 py-1.5 rounded-lg font-medium border transition ${
-                onlyOwner
-                  ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300'
-                  : 'bg-[#131720] border-slate-800 text-slate-300'
-              }`}
-            >
-              Owner Direct
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setDrawMode((prev) => !prev)}
-              className={`px-3 py-1.5 rounded-lg font-semibold border transition ${
-                drawMode
-                  ? 'bg-amber-400 text-[#0A0B0E] border-amber-300'
-                  : 'bg-[#131720] border-amber-500/40 text-amber-300'
-              }`}
-            >
-              {drawMode ? '✕ Cancel Zone' : '◎ Draw Zone'}
-            </button>
-
-            <button type="button" onClick={() => setShowPostModal(true)} className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-300 to-amber-500 text-[#0A0B0E] font-extrabold transition">+ Post / Boost</button>
-            {activeZone && (
-              <button
-                type="button"
-                onClick={loadAllProperties}
-                className="px-3 py-1.5 rounded-lg bg-rose-500/20 border border-rose-400/50 text-rose-200 font-medium"
-              >
-                Reset Map
-              </button>
+          <button
+            type="button"
+            onClick={() => setShowFilters(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-medium border border-[#D4AF37]/35 bg-[#151821] text-[#F3D58D] hover:border-[#D4AF37] transition"
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <path d="M4 6h16M7 12h10M10 18h4" strokeLinecap="round" />
+            </svg>
+            <span className="hidden sm:inline">Filters</span>
+            {activeFilterCount > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold gold-gradient">
+                {activeFilterCount}
+              </span>
             )}
-          </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowPostModal(true)}
+            className="gold-gradient px-3.5 sm:px-4 py-2 rounded-full text-xs font-semibold tracking-wide shadow-[0_6px_18px_rgba(212,175,55,0.28)] hover:brightness-105 transition"
+          >
+            + Post / Boost
+          </button>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-5">
-        <div className="lg:col-span-7">
+      {/* Main Responsive Workspace */}
+      <div className="flex-1 flex flex-col lg:flex-row lg:overflow-hidden relative">
+        {/* LEFT PANE (Desktop) / MAP TAB (Mobile) */}
+        <section
+          className={`${
+            mobileTab === 'map'
+              ? 'block h-[calc(100dvh-134px)]'
+              : 'hidden'
+          } lg:block lg:h-full lg:w-[52%] xl:w-[56%] relative border-b lg:border-b-0 lg:border-r border-[#D4AF37]/15 bg-[#0F1117]`}
+        >
+          {/* Floating Top Map Pills */}
+          <div className="absolute top-3 left-3 right-3 z-[400] flex items-center justify-between gap-2 pointer-events-none">
+            <div className="flex items-center gap-2 pointer-events-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  if (activeZone) {
+                    loadAllProperties();
+                  } else {
+                    setDrawMode((d) => !d);
+                  }
+                }}
+                className={`luxury-glass px-3.5 py-2 rounded-full text-xs font-medium flex items-center gap-1.5 transition shadow-lg ${
+                  drawMode || activeZone
+                    ? 'border-[#D4AF37] text-[#F5E6B3] bg-[#241E12]/90'
+                    : 'text-[#E7E2D6] hover:border-[#D4AF37]/60'
+                }`}
+              >
+                <svg className="w-3.5 h-3.5 text-[#D4AF37]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <circle cx="12" cy="12" r="8" strokeDasharray="3 3" />
+                  <circle cx="12" cy="12" r="2.5" />
+                </svg>
+                {activeZone ? 'Clear Zone' : drawMode ? 'Drawing Zone...' : 'Draw Zone'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowFilters(true)}
+                className="luxury-glass px-3 py-2 rounded-full text-xs font-medium text-[#E7E2D6] hover:border-[#D4AF37]/60 transition shadow-lg"
+              >
+                {mode === 'all' ? 'All Modes' : mode === 'rent' ? 'For Rent' : 'For Buy'}
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setMobileTab('home');
+                const input = document.getElementById('yoma-ai-input');
+                input?.focus();
+              }}
+              className="pointer-events-auto gold-gradient px-3.5 py-2 rounded-full text-xs font-semibold flex items-center gap-1.5 shadow-[0_6px_20px_rgba(212,175,55,0.32)]"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="7" />
+                <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
+              </svg>
+              AI Search
+            </button>
+          </div>
+
           <YomaMap
             properties={filtered}
             selectedId={selected?.id ?? null}
@@ -295,185 +409,654 @@ export default function HomePage() {
             onCancelDraw={() => setDrawMode(false)}
             onClearZone={loadAllProperties}
           />
-        </div>
 
-        <div className="lg:col-span-5 space-y-4 max-h-[640px] overflow-y-auto pr-1">
+          {/* Floating Bottom Preview Card When a Pin is Selected */}
+          {selected && (
+            <div className="absolute bottom-4 left-3 right-3 sm:left-4 sm:right-4 z-[400] max-w-md mx-auto">
+              <div
+                onClick={() => setDetailProp(selected)}
+                className="luxury-glass rounded-2xl p-3 flex items-center gap-3 cursor-pointer hover:border-[#D4AF37]/60 transition shadow-[0_14px_34px_rgba(0,0,0,0.6)]"
+              >
+                <img
+                  src={
+                    selected.image_url ||
+                    'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=400&q=80'
+                  }
+                  alt={selected.title}
+                  className="w-16 h-16 rounded-xl object-cover border border-[#D4AF37]/30 shrink-0"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="font-luxury text-sm font-semibold text-[#F8F3E6] truncate">
+                      {selected.title}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelected(null);
+                      }}
+                      className="text-[#9A9589] hover:text-white text-xs px-1"
+                      aria-label="Close preview"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <p className="text-xs font-semibold text-[#F3D58D] mt-0.5">
+                    {formatPrice(selected)} • {selected.sqft.toLocaleString()} sqft
+                  </p>
+                  <p className="text-[11px] text-[#ABA599] truncate mt-0.5">
+                    {selected.township} Township • {selected.beds} Beds • {selected.baths} Baths
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* RIGHT PANE (Desktop) / HOME & SAVED TABS (Mobile) */}
+        <section
+          className={`${
+            mobileTab === 'map' ? 'hidden lg:flex' : 'flex'
+          } flex-1 flex-col lg:h-full lg:overflow-y-auto px-4 sm:px-5 pt-5 pb-28 lg:pb-8`}
+        >
+          {/* Editorial Hero & Search (Hidden on Mobile Saved Tab) */}
+          {mobileTab !== 'saved' ? (
+            <div className="space-y-4 mb-5">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.22em] text-[#D4AF37] font-semibold">
+                  Yangon Luxury Portfolio
+                </p>
+                <h2 className="font-luxury text-3xl sm:text-4xl font-semibold leading-[1.12] text-[#FAF6EC] mt-1">
+                  Find Your{' '}
+                  <span className="gold-text">Masterpiece</span>
+                </h2>
+              </div>
+
+              {/* Pill AI Search Input */}
+              <form
+                onSubmit={handleAiSearch}
+                className="flex items-center gap-2 rounded-full bg-[#141720] border border-[#D4AF37]/25 focus-within:border-[#D4AF37] px-3.5 py-2 transition shadow-[0_8px_24px_rgba(0,0,0,0.35)]"
+              >
+                <svg className="w-4 h-4 text-[#D4AF37] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
+                </svg>
+                <input
+                  id="yoma-ai-input"
+                  type="text"
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  placeholder='Try: "3 bed Bahan condo under 40L"'
+                  className="flex-1 bg-transparent text-sm text-[#F5F2EB] placeholder:text-[#7E7A70] focus:outline-none min-w-0"
+                />
+                <button
+                  type="submit"
+                  disabled={aiLoading}
+                  className="gold-gradient px-3.5 py-1.5 rounded-full text-xs font-semibold tracking-wide shrink-0 disabled:opacity-60 transition"
+                >
+                  {aiLoading ? 'Thinking...' : 'AI Search'}
+                </button>
+              </form>
+
+              {/* Category Icon Chips */}
+              <div className="flex items-center gap-2.5 overflow-x-auto no-scrollbar pb-1">
+                {CATEGORIES.map((cat) => {
+                  const active = category === cat.key;
+                  return (
+                    <button
+                      key={cat.key}
+                      type="button"
+                      onClick={() => setCategory(cat.key)}
+                      className={`shrink-0 flex flex-col items-center justify-center min-w-[76px] px-3 py-2.5 rounded-2xl border transition ${
+                        active
+                          ? 'border-[#D4AF37] bg-[#D4AF37]/15 text-[#F5E6B3] shadow-[0_0_16px_rgba(212,175,55,0.18)]'
+                          : 'border-white/10 bg-[#13161F] text-[#A8A296] hover:border-[#D4AF37]/40 hover:text-[#EAE4D7]'
+                      }`}
+                    >
+                      <svg className="w-4 h-4 mb-1 text-[#D4AF37]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+                        {cat.key === 'penthouse' ? (
+                          <path d="M4 20h16M6 20V7l6-4 6 4v13M10 12h4M10 16h4" strokeLinecap="round" strokeLinejoin="round" />
+                        ) : cat.key === 'condo' ? (
+                          <path d="M5 20V5a1 1 0 011-1h12a1 1 0 011 1v15M3 20h18M9 8h2M13 8h2M9 12h2M13 12h2M10 20v-4h4v4" strokeLinecap="round" strokeLinejoin="round" />
+                        ) : (
+                          <path d="M3 11l9-7 9 7M5 10v10h14V10M9 20v-6h6v6" strokeLinecap="round" strokeLinejoin="round" />
+                        )}
+                      </svg>
+                      <span className="text-[11px] font-medium">{cat.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Quick Mode & Essential Toggles */}
+              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+                {(['all', 'rent', 'buy'] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setMode(m)}
+                    className={`px-3.5 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wider border transition shrink-0 ${
+                      mode === m
+                        ? 'gold-gradient border-transparent'
+                        : 'border-white/10 bg-[#141720] text-[#B7B1A4] hover:border-[#D4AF37]/40'
+                    }`}
+                  >
+                    {m === 'all' ? 'All' : m === 'rent' ? 'For Rent' : 'For Buy'}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setOnlyGenerator((v) => !v)}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-medium border transition shrink-0 ${
+                    onlyGenerator
+                      ? 'border-[#D4AF37] bg-[#D4AF37]/15 text-[#F5E6B3]'
+                      : 'border-white/10 bg-[#141720] text-[#B7B1A4] hover:border-[#D4AF37]/40'
+                  }`}
+                >
+                  ⚡ 24/7 Power
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOnlyOwner((v) => !v)}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-medium border transition shrink-0 ${
+                    onlyOwner
+                      ? 'border-[#D4AF37] bg-[#D4AF37]/15 text-[#F5E6B3]'
+                      : 'border-white/10 bg-[#141720] text-[#B7B1A4] hover:border-[#D4AF37]/40'
+                  }`}
+                >
+                  Owner Direct
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="mb-5">
+              <p className="text-[11px] uppercase tracking-[0.22em] text-[#D4AF37] font-semibold">
+                Private Collection
+              </p>
+              <h2 className="font-luxury text-3xl font-semibold text-[#FAF6EC] mt-1">
+                Saved <span className="gold-text">Masterpieces</span>
+              </h2>
+            </div>
+          )}
+
           {/* Active Gemini AI Filter Banner */}
           {aiFilters && (
-            <div className="flex items-center justify-between gap-2 rounded-xl bg-amber-500/10 border border-amber-400/40 px-3.5 py-2.5 text-xs">
-              <div>
-                <p className="text-[10px] uppercase tracking-wider font-bold text-amber-300">
-                  ✨ Gemini AI Filter Active
+            <div className="mb-4 rounded-2xl border border-[#D4AF37]/45 bg-[#1B1810] px-4 py-3 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#F3D58D]">
+                  ✦ Gemini AI Filter Active
                 </p>
-                <p className="text-slate-200 mt-0.5">{aiFilters.summary}</p>
+                <p className="text-xs text-[#E8E2D4] truncate mt-0.5">
+                  {aiFilters.summary}
+                </p>
               </div>
               <button
                 type="button"
-                onClick={clearAiSearch}
-                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-rose-300 font-semibold whitespace-nowrap"
+                onClick={resetAllFilters}
+                className="w-7 h-7 rounded-full border border-[#D4AF37]/40 text-[#F3D58D] hover:bg-[#D4AF37]/20 flex items-center justify-center text-xs shrink-0"
               >
-                ✕ Clear
+                ✕
               </button>
             </div>
           )}
 
+          {/* Error Alerts */}
           {aiError && (
-            <div className="rounded-xl border border-rose-500/50 bg-rose-950/40 p-3 text-xs text-rose-200">
-              AI Search error: {aiError}
+            <div className="mb-4 rounded-2xl border border-amber-500/40 bg-amber-950/30 px-4 py-3 text-xs text-amber-200">
+              {aiError}
             </div>
           )}
-
-          <div className="flex items-center justify-between">
-            <span className="text-xs uppercase tracking-widest text-amber-400/90 font-semibold">
-              {loading
-                ? 'Loading Yangon Portfolio...'
-                : `${filtered.length} Verified Properties`}
-            </span>
-            {activeZone && (
-              <span className="text-xs text-emerald-400">Filtered by 1.5km Map Zone</span>
-            )}
-          </div>
-
           {errorMsg && (
-            <div className="rounded-xl border border-rose-500/50 bg-rose-950/40 p-3 text-xs text-rose-200">
+            <div className="mb-4 rounded-2xl border border-red-500/40 bg-red-950/35 px-4 py-3 text-xs text-red-200">
               Database error: {errorMsg}
             </div>
           )}
 
-          {!loading && filtered.length === 0 && (
-            <div className="rounded-2xl border border-slate-800 bg-[#11151E] p-6 text-center space-y-2">
-              <p className="text-sm font-semibold text-slate-200">
-                No matching properties found
+          {/* Section Header */}
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-luxury text-lg text-[#F5EFE2]">
+              {mobileTab === 'saved' || showSavedOnly
+                ? 'Saved Properties'
+                : 'Featured Masterpieces'}
+            </h3>
+            <span className="text-[11px] uppercase tracking-[0.16em] text-[#D4AF37] font-semibold">
+              {loading
+                ? 'Loading...'
+                : `${displayedListings.length} Verified ${
+                    displayedListings.length === 1 ? 'Estate' : 'Estates'
+                  }`}
+            </span>
+          </div>
+
+          {/* Property Cards Grid */}
+          {loading ? (
+            <div className="space-y-4">
+              {[1, 2].map((n) => (
+                <div
+                  key={n}
+                  className="luxury-card rounded-3xl h-72 animate-pulse"
+                />
+              ))}
+            </div>
+          ) : displayedListings.length === 0 ? (
+            <div className="luxury-card rounded-3xl p-8 text-center my-2">
+              <p className="font-luxury text-lg text-[#F5EFE2]">
+                {mobileTab === 'saved'
+                  ? 'No saved residences yet'
+                  : 'No matching estates found'}
               </p>
-              <p className="text-xs text-slate-400">
-                Try broadening your budget or clearing active filters.
+              <p className="text-xs text-[#9A9589] mt-1.5">
+                {mobileTab === 'saved'
+                  ? 'Tap the heart icon on any residence to curate your shortlist.'
+                  : 'Try broadening your budget or resetting active filters.'}
               </p>
               <button
                 type="button"
-                onClick={clearAiSearch}
-                className="mt-2 px-4 py-1.5 rounded-lg bg-amber-400 text-[#0A0B0E] text-xs font-bold"
+                onClick={() =>
+                  mobileTab === 'saved'
+                    ? setMobileTab('home')
+                    : resetAllFilters()
+                }
+                className="gold-gradient mt-4 px-5 py-2.5 rounded-full text-xs font-semibold"
               >
-                Reset All Filters
+                {mobileTab === 'saved' ? 'Explore Estates' : 'Reset All Filters'}
               </button>
             </div>
-          )}
+          ) : (
+            <div className="space-y-5">
+              {displayedListings.map((p) => {
+                const isSaved = savedIds.includes(p.id);
+                const isSelected = selected?.id === p.id;
+                const cleanPhone = (p.contact_phone || '').replace(/\+/g, '');
 
-          {filtered.map((p) => (
-            <div
-              key={p.id}
-              onClick={() => setSelected(p)}
-              className={`cursor-pointer rounded-2xl overflow-hidden border transition bg-[#11151E] ${
-                selected?.id === p.id
-                  ? 'border-emerald-400 shadow-lg'
-                  : p.is_sponsored
-                  ? 'border-amber-400/60 shadow-lg'
-                  : 'border-slate-800'
-              }`}
-            >
-              <div className="relative h-44 w-full bg-slate-900">
-                {p.image_url && (
-                  <img
-                    src={p.image_url}
-                    alt={p.title}
-                    className="h-full w-full object-cover"
-                  />
-                )}
-                <div className="absolute top-3 left-3 flex gap-2">
-                  {p.is_sponsored && (
-                    <span className="bg-gradient-to-r from-amber-300 to-amber-500 text-[#0A0B0E] text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full shadow">
-                      ★ Premier Featured
-                    </span>
-                  )}
-                  <span className="bg-[#0A0B0E]/85 text-slate-200 text-[11px] font-semibold uppercase px-2.5 py-1 rounded-full border border-slate-700">
-                    For {p.mode}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setDetailProp(p);
-                  }}
-                  className="absolute top-3 right-3 bg-[#0A0B0E]/85 hover:bg-amber-400 hover:text-[#0A0B0E] text-amber-200 text-[11px] font-bold px-2.5 py-1 rounded-full border border-amber-400/50 transition"
-                >
-                  🌐 360° Tour
-                </button>
-                <div className="absolute bottom-3 left-3 bg-[#0A0B0E]/90 backdrop-blur px-3 py-1 rounded-xl border border-amber-400/40">
-                  <span className="text-amber-300 font-bold text-base">
-                    {Number(p.price_lakhs).toLocaleString()} Lakhs
-                  </span>
-                  <span className="text-slate-400 text-xs ml-1">
-                    {p.mode === 'rent' ? '/ mo' : 'MMK'}
-                  </span>
+                return (
+                  <article
+                    key={p.id}
+                    onClick={() => {
+                      setSelected(p);
+                      setDetailProp(p);
+                    }}
+                    className={`luxury-card rounded-3xl overflow-hidden cursor-pointer transition duration-300 hover:border-[#D4AF37]/60 ${
+                      isSelected ? 'ring-1 ring-[#D4AF37]' : ''
+                    }`}
+                  >
+                    {/* Full-Bleed Hero Photo */}
+                    <div className="relative h-56 sm:h-60 w-full overflow-hidden">
+                      <img
+                        src={
+                          p.image_url ||
+                          'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=900&q=80'
+                        }
+                        alt={p.title}
+                        className="w-full h-full object-cover transition duration-500 hover:scale-105"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#0B0C10] via-[#0B0C10]/25 to-transparent" />
+
+                      {/* Top Badges & Save Heart */}
+                      <div className="absolute top-3 left-3 right-3 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {p.is_sponsored && (
+                            <span className="gold-gradient px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shadow">
+                              ★ Premier Featured
+                            </span>
+                          )}
+                          <span className="luxury-glass px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider text-[#F5EFE2]">
+                            {p.mode === 'rent' ? 'For Rent' : 'For Sale'}
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleSave(p.id);
+                          }}
+                          aria-label="Save property"
+                          className="w-9 h-9 rounded-full luxury-glass flex items-center justify-center hover:border-[#D4AF37] transition"
+                        >
+                          <svg
+                            className="w-4 h-4"
+                            viewBox="0 0 24 24"
+                            fill={isSaved ? '#D4AF37' : 'none'}
+                            stroke={isSaved ? '#D4AF37' : '#F5EFE2'}
+                            strokeWidth="1.9"
+                          >
+                            <path d="M12 21s-7-4.5-9.2-8.4C1.1 9.5 2.7 5.5 6.5 5.1c2.1-.2 4 1 5.5 2.7 1.5-1.7 3.4-2.9 5.5-2.7 3.8.4 5.4 4.4 3.7 7.5C19 16.5 12 21 12 21z" />
+                          </svg>
+                        </button>
+                      </div>
+
+                      {/* Bottom Frosted Price Pill */}
+                      <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-2">
+                        <span className="luxury-glass px-3.5 py-1.5 rounded-xl text-sm font-semibold text-[#F5E6B3] border-[#D4AF37]/40">
+                          {formatPrice(p)}
+                        </span>
+                        {p.owner_direct && (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-emerald-950/80 border border-emerald-400/35 text-emerald-200">
+                            Owner Direct
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Card Details */}
+                    <div className="p-4 sm:p-5">
+                      <h4 className="font-luxury text-xl font-semibold text-[#FAF6EC] leading-snug">
+                        {p.title}
+                      </h4>
+                      <p className="text-xs text-[#ABA599] mt-1">
+                        {p.township} Township • {p.property_type}
+                        {p.floor_level ? ` • ${p.floor_level}` : ''}
+                      </p>
+
+                      {/* Specs Row */}
+                      <div className="flex items-center flex-wrap gap-x-3 gap-y-1.5 text-xs text-[#D8D2C5] mt-3 pt-3 border-t border-white/10">
+                        <span>{p.beds} Beds</span>
+                        <span className="text-[#D4AF37]/60">•</span>
+                        <span>{p.baths} Baths</span>
+                        <span className="text-[#D4AF37]/60">•</span>
+                        <span>{Number(p.sqft).toLocaleString()} sqft</span>
+                        {p.backup_power && (
+                          <>
+                            <span className="text-[#D4AF37]/60">•</span>
+                            <span className="text-[#F3D58D]">⚡ 24/7 Power</span>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="mt-4 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDetailProp(p);
+                          }}
+                          className="flex-1 gold-gradient py-2.5 px-4 rounded-xl text-xs font-semibold tracking-wide hover:brightness-105 transition"
+                        >
+                          Details &amp; Calculator
+                        </button>
+                        {p.contact_phone && (
+                          <>
+                            <a
+                              href={`tel:${p.contact_phone}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="px-3.5 py-2.5 rounded-xl bg-[#191C26] border border-[#D4AF37]/25 text-xs font-medium text-[#EFE9DC] hover:border-[#D4AF37] transition"
+                            >
+                              Call
+                            </a>
+                            <a
+                              href={`https://t.me/+${cleanPhone}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="px-3.5 py-2.5 rounded-xl bg-[#191C26] border border-[#D4AF37]/25 text-xs font-medium text-[#EFE9DC] hover:border-[#D4AF37] transition"
+                            >
+                              Telegram
+                            </a>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      </div>
+
+      {/* Mobile Glassmorphic Bottom Navigation */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 luxury-glass border-x-0 border-b-0 px-4 py-2.5 flex items-center justify-around">
+        <button
+          type="button"
+          onClick={() => setMobileTab('home')}
+          className={`flex flex-col items-center gap-1 text-[11px] font-medium transition ${
+            mobileTab === 'home' ? 'text-[#F3D58D]' : 'text-[#8C877D]'
+          }`}
+        >
+          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <path d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1h-5.5v-6.5h-5V21H4a1 1 0 01-1-1v-9.5z" strokeLinejoin="round" />
+          </svg>
+          Home
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setMobileTab('map')}
+          className={`flex flex-col items-center gap-1 text-[11px] font-medium transition ${
+            mobileTab === 'map' ? 'text-[#F3D58D]' : 'text-[#8C877D]'
+          }`}
+        >
+          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <path d="M12 21s7-5.5 7-11a7 7 0 10-14 0c0 5.5 7 11 7 11z" />
+            <circle cx="12" cy="10" r="2.5" />
+          </svg>
+          Map
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setMobileTab('saved')}
+          className={`flex flex-col items-center gap-1 text-[11px] font-medium transition relative ${
+            mobileTab === 'saved' ? 'text-[#F3D58D]' : 'text-[#8C877D]'
+          }`}
+        >
+          <svg className="w-5 h-5" viewBox="0 0 24 24" fill={mobileTab === 'saved' ? '#D4AF37' : 'none'} stroke="currentColor" strokeWidth="1.8">
+            <path d="M12 21s-7-4.5-9.2-8.4C1.1 9.5 2.7 5.5 6.5 5.1c2.1-.2 4 1 5.5 2.7 1.5-1.7 3.4-2.9 5.5-2.7 3.8.4 5.4 4.4 3.7 7.5C19 16.5 12 21 12 21z" />
+          </svg>
+          Saved{savedIds.length > 0 ? ` (${savedIds.length})` : ''}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setShowPostModal(true)}
+          className="flex flex-col items-center gap-1 text-[11px] font-medium text-[#8C877D] hover:text-[#F3D58D] transition"
+        >
+          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 8v8M8 12h8" strokeLinecap="round" />
+          </svg>
+          Post
+        </button>
+      </nav>
+
+      {/* Slide-Up / Modal Elite Filters Drawer */}
+      {showFilters && (
+        <div
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+          onClick={() => setShowFilters(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl bg-[#11131A] border border-[#D4AF37]/30 p-5 sm:p-6 max-h-[88dvh] overflow-y-auto shadow-[0_20px_60px_rgba(0,0,0,0.8)]"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-white/10">
+              <button
+                type="button"
+                onClick={() => setShowFilters(false)}
+                className="text-sm text-[#9A9589] hover:text-white"
+              >
+                ✕
+              </button>
+              <h3 className="font-luxury text-lg text-[#FAF6EC]">
+                Elite Filters
+              </h3>
+              <button
+                type="button"
+                onClick={resetAllFilters}
+                className="text-xs font-semibold text-[#F3D58D] hover:underline"
+              >
+                Reset
+              </button>
+            </div>
+
+            <div className="space-y-5 py-5">
+              {/* Mode */}
+              <div>
+                <p className="text-xs uppercase tracking-[0.16em] text-[#ABA599] font-semibold mb-2.5">
+                  Acquisition Type
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['all', 'rent', 'buy'] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setMode(m)}
+                      className={`py-2.5 rounded-xl text-xs font-semibold border transition ${
+                        mode === m
+                          ? 'border-[#D4AF37] bg-[#D4AF37]/15 text-[#F5E6B3]'
+                          : 'border-white/10 bg-[#171A24] text-[#B8B2A5]'
+                      }`}
+                    >
+                      {m === 'all' ? 'All' : m === 'rent' ? 'For Rent' : 'For Sale'}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              <div className="p-4 space-y-2.5">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h2 className="font-semibold text-slate-100 text-base leading-snug">
-                      {p.title}
-                    </h2>
-                    <p className="text-xs text-slate-400">
-                      {p.township} Township • {p.property_type}
-                      {p.floor_level ? ` • ${p.floor_level}` : ''}
-                    </p>
-                  </div>
-                  {p.owner_direct && (
-                    <span className="text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-md whitespace-nowrap">
-                      Owner Direct
-                    </span>
-                  )}
+              {/* Property Type */}
+              <div>
+                <p className="text-xs uppercase tracking-[0.16em] text-[#ABA599] font-semibold mb-2.5">
+                  Property Type
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {CATEGORIES.map((cat) => (
+                    <button
+                      key={cat.key}
+                      type="button"
+                      onClick={() => setCategory(cat.key)}
+                      className={`py-2.5 px-3 rounded-xl text-xs font-medium border transition text-left ${
+                        category === cat.key
+                          ? 'border-[#D4AF37] bg-[#D4AF37]/15 text-[#F5E6B3]'
+                          : 'border-white/10 bg-[#171A24] text-[#B8B2A5]'
+                      }`}
+                    >
+                      {cat.label}
+                    </button>
+                  ))}
                 </div>
+              </div>
 
-                <div className="flex items-center gap-3 text-xs text-slate-300 pt-1 border-t border-slate-800/80">
-                  <span>{p.beds} Beds</span>
-                  <span>•</span>
-                  <span>{p.baths} Baths</span>
-                  <span>•</span>
-                  <span>{Number(p.sqft).toLocaleString()} sqft</span>
-                  {p.backup_power && (
-                    <>
-                      <span>•</span>
-                      <span className="text-amber-300">⚡ Generator</span>
-                    </>
-                  )}
+              {/* Max Price Range */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs uppercase tracking-[0.16em] text-[#ABA599] font-semibold">
+                    Max Budget (Lakhs)
+                  </p>
+                  <span className="text-xs font-semibold text-[#F3D58D]">
+                    {maxPriceLakhs === 0
+                      ? 'Any Budget'
+                      : `Up to ${maxPriceLakhs.toLocaleString()} L`}
+                  </span>
                 </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={20000}
+                  step={50}
+                  value={maxPriceLakhs}
+                  onChange={(e) => setMaxPriceLakhs(Number(e.target.value))}
+                  className="w-full accent-[#D4AF37]"
+                />
+                <div className="flex justify-between text-[11px] text-[#7E7A70] mt-1">
+                  <span>Any</span>
+                  <span>5,000L</span>
+                  <span>20,000L+</span>
+                </div>
+              </div>
 
-                <div className="pt-2 flex gap-2">
+              {/* Minimum Bedrooms */}
+              <div>
+                <p className="text-xs uppercase tracking-[0.16em] text-[#ABA599] font-semibold mb-2.5">
+                  Minimum Bedrooms
+                </p>
+                <div className="grid grid-cols-5 gap-2">
+                  {[0, 1, 2, 3, 4].map((b) => (
+                    <button
+                      key={b}
+                      type="button"
+                      onClick={() => setMinBeds(b)}
+                      className={`py-2 rounded-xl text-xs font-semibold border transition ${
+                        minBeds === b
+                          ? 'border-[#D4AF37] bg-[#D4AF37]/15 text-[#F5E6B3]'
+                          : 'border-white/10 bg-[#171A24] text-[#B8B2A5]'
+                      }`}
+                    >
+                      {b === 0 ? 'Any' : `${b}+`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Elite Amenities */}
+              <div>
+                <p className="text-xs uppercase tracking-[0.16em] text-[#ABA599] font-semibold mb-2.5">
+                  Elite Amenities
+                </p>
+                <div className="grid grid-cols-2 gap-2.5 text-xs">
                   <button
                     type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDetailProp(p);
-                    }}
-                    className="flex-1 text-center py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-[#0A0B0E] font-bold text-xs transition"
+                    onClick={() => setOnlyGenerator((v) => !v)}
+                    className={`flex items-center gap-2 p-2.5 rounded-xl border transition ${
+                      onlyGenerator
+                        ? 'border-[#D4AF37] bg-[#D4AF37]/15 text-[#F5E6B3]'
+                        : 'border-white/10 bg-[#171A24] text-[#B8B2A5]'
+                    }`}
                   >
-                    Details & Calculator
+                    <span>{onlyGenerator ? '✓' : '○'}</span> 24/7 Power
                   </button>
-                  <a
-                    href={`tel:${p.contact_phone}`}
-                    onClick={(e) => e.stopPropagation()}
-                    className="px-3.5 py-2 rounded-xl bg-[#1A202C] hover:bg-slate-800 text-amber-200 border border-amber-500/30 font-semibold text-xs transition"
+                  <button
+                    type="button"
+                    onClick={() => setOnlyOwner((v) => !v)}
+                    className={`flex items-center gap-2 p-2.5 rounded-xl border transition ${
+                      onlyOwner
+                        ? 'border-[#D4AF37] bg-[#D4AF37]/15 text-[#F5E6B3]'
+                        : 'border-white/10 bg-[#171A24] text-[#B8B2A5]'
+                    }`}
                   >
-                    Call
-                  </a>
-                  <a
-                    href={`https://t.me/+${p.contact_phone.replace(/\+/g, '')}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="px-3.5 py-2 rounded-xl bg-[#1A202C] hover:bg-slate-800 text-slate-200 border border-slate-700 font-semibold text-xs transition"
+                    <span>{onlyOwner ? '✓' : '○'}</span> Owner Direct
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOnlyElevator((v) => !v)}
+                    className={`flex items-center gap-2 p-2.5 rounded-xl border transition ${
+                      onlyElevator
+                        ? 'border-[#D4AF37] bg-[#D4AF37]/15 text-[#F5E6B3]'
+                        : 'border-white/10 bg-[#171A24] text-[#B8B2A5]'
+                    }`}
                   >
-                    Telegram
-                  </a>
+                    <span>{onlyElevator ? '✓' : '○'}</span> Elevator
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOnlyFloodFree((v) => !v)}
+                    className={`flex items-center gap-2 p-2.5 rounded-xl border transition ${
+                      onlyFloodFree
+                        ? 'border-[#D4AF37] bg-[#D4AF37]/15 text-[#F5E6B3]'
+                        : 'border-white/10 bg-[#171A24] text-[#B8B2A5]'
+                    }`}
+                  >
+                    <span>{onlyFloodFree ? '✓' : '○'}</span> Flood-Free
+                  </button>
                 </div>
               </div>
             </div>
-          ))}
-        </div>
-      </div>
 
+            <button
+              type="button"
+              onClick={() => setShowFilters(false)}
+              className="w-full gold-gradient py-3.5 rounded-2xl text-sm font-semibold tracking-wide shadow-[0_10px_28px_rgba(212,175,55,0.3)]"
+            >
+              Apply Elite Filters ({filtered.length} Estates)
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Property Detail & Post/Boost Modals */}
       {detailProp && (
         <PropertyModal
           property={detailProp}

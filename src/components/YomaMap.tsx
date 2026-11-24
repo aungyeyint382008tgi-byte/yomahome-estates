@@ -458,20 +458,20 @@ export default function YomaMap({
       if (!p.lat || !p.lng) return;
       const isSelected = p.id === selectedId;
       const bg = isSelected
-        ? '#1A73E8'
+        ? '#D4AF37'
         : p.is_sponsored
-        ? '#F59E0B'
-        : '#FFFFFF';
+        ? '#1C170C'
+        : '#11131A';
       const text = isSelected
-        ? '#FFFFFF'
+        ? '#0B0C10'
         : p.is_sponsored
-        ? '#0A0B0E'
-        : '#1F2937';
+        ? '#F3D58D'
+        : '#F5F2EB';
       const border = isSelected
-        ? '#FFFFFF'
+        ? '#FAF0CE'
         : p.is_sponsored
-        ? '#FEF3C7'
-        : '#D1D5DB';
+        ? '#D4AF37'
+        : 'rgba(212,175,55,0.65)';
 
       const el = document.createElement('div');
       el.style.cursor = 'pointer';
