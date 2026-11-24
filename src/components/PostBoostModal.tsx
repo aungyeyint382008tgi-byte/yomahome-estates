@@ -29,8 +29,10 @@ export default function PostBoostModal({
 }) {
   useEffect(() => {
     (window as unknown as { __yomaModalOpen?: boolean }).__yomaModalOpen = true;
+    window.dispatchEvent(new CustomEvent('yoma-post-modal-toggle', { detail: { open: true } }));
     return () => {
       (window as unknown as { __yomaModalOpen?: boolean }).__yomaModalOpen = false;
+      window.dispatchEvent(new CustomEvent('yoma-post-modal-toggle', { detail: { open: false } }));
     };
   }, []);
 

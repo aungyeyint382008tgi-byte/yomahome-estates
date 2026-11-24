@@ -289,13 +289,15 @@ export default function YomaMap({
       onZoneDrawnRef.current(e.lngLat.lat, e.lngLat.lng, radius);
     });
 
-    const modalWatch = window.setInterval(() => {
+    const syncModalState = () => {
         const isOpen = Boolean((window as unknown as { __yomaModalOpen?: boolean }).__yomaModalOpen);
-        setModalBlocked((prev) => (prev === isOpen ? prev : isOpen));
-      }, 150);
+        setModalBlocked(isOpen);
+      };
+      syncModalState();
+      window.addEventListener('yoma-post-modal-toggle', syncModalState);
       mapRef.current = map;
 
-    clearInterval(modalWatch);
+    window.removeEventListener('yoma-post-modal-toggle', syncModalState);
     return () => {
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
