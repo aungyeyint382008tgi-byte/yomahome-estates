@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Property } from '@/components/YomaMap';
 
@@ -27,6 +27,13 @@ export default function PostBoostModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  useEffect(() => {
+    (window as unknown as { __yomaModalOpen?: boolean }).__yomaModalOpen = true;
+    return () => {
+      (window as unknown as { __yomaModalOpen?: boolean }).__yomaModalOpen = false;
+    };
+  }, []);
+
   const [tab, setTab] = useState<'post' | 'boost'>('post');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);

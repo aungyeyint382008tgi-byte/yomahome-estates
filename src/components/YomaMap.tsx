@@ -96,6 +96,7 @@ export default function YomaMap({
 }) {
   const [mapStyle, setMapStyle] = useState<'street' | 'satellite'>('street');
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [modalBlocked, setModalBlocked] = useState(false);
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeError, setRouteError] = useState<string | null>(null);
   const [routeInfo, setRouteInfo] = useState<{
@@ -288,8 +289,13 @@ export default function YomaMap({
       onZoneDrawnRef.current(e.lngLat.lat, e.lngLat.lng, radius);
     });
 
-    mapRef.current = map;
+    const modalWatch = window.setInterval(() => {
+        const isOpen = Boolean((window as unknown as { __yomaModalOpen?: boolean }).__yomaModalOpen);
+        setModalBlocked((prev) => (prev === isOpen ? prev : isOpen));
+      }, 150);
+      mapRef.current = map;
 
+    clearInterval(modalWatch);
     return () => {
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
