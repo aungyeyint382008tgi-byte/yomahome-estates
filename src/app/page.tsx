@@ -409,16 +409,17 @@ export default function HomePage() {
             </button>
           </div>
 
-          <YomaMap
-            properties={filtered}
-            selectedId={selected?.id ?? null}
-            drawMode={drawMode}
-            activeZone={activeZone}
-            onSelectProperty={(p) => setSelected(p)}
-            onZoneDrawn={handleZoneDrawn}
-            onCancelDraw={() => setDrawMode(false)}
-            onClearZone={loadAllProperties}
-          />
+                <YomaMap
+                  properties={filtered}
+                  selectedId={selected?.id ?? null}
+                  drawMode={drawMode}
+                  activeZone={activeZone}
+                  onSelectProperty={(p) => setSelected(p)}
+                  onZoneDrawn={handleZoneDrawn}
+                  onCancelDraw={() => setDrawMode(false)}
+                  onClearZone={loadAllProperties}
+                  hideOverlayControls={showPostModal}
+                />
 
           {/* Floating Bottom Preview Card When a Pin is Selected */}
           {selected && (

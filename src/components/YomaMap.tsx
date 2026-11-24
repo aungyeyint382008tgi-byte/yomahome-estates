@@ -84,6 +84,7 @@ export default function YomaMap({
   onZoneDrawn,
   onCancelDraw,
   onClearZone,
+  hideOverlayControls,
 }: {
   properties: Property[];
   selectedId: string | null;
@@ -93,6 +94,7 @@ export default function YomaMap({
   onZoneDrawn: (lat: number, lng: number, radiusMeters: number) => void;
   onCancelDraw: () => void;
   onClearZone: () => void;
+  hideOverlayControls?: boolean;
 }) {
   const [mapStyle, setMapStyle] = useState<'street' | 'satellite'>('street');
   const [mapLoaded, setMapLoaded] = useState(false);
@@ -518,7 +520,7 @@ export default function YomaMap({
 
       {/* Google-style Road Route & Directions Card */}
       {!drawMode && selectedProp && (
-        <div className="absolute top-3 left-3 right-3 z-50 max-w-md bg-white/95 backdrop-blur border border-slate-200 rounded-2xl p-3 shadow-xl text-slate-800 space-y-2" style={{ display: modalBlocked ? 'none' : undefined }}>
+        <div className="absolute top-3 left-3 right-3 z-50 max-w-md bg-white/95 backdrop-blur border border-slate-200 rounded-2xl p-3 shadow-xl text-slate-800 space-y-2" style={{ display: (hideOverlayControls || modalBlocked) ? 'none' : undefined }}>
           <div className="flex items-start justify-between gap-2">
             <div>
               <p className="text-xs font-bold text-slate-900 leading-tight">
