@@ -360,7 +360,8 @@ export default function HomePage() {
         >
           {/* Floating Top Map Pills */}
           <div className="absolute top-3 left-3 right-3 z-[400] flex items-center justify-between gap-2 pointer-events-none">
-            <div className="flex items-center gap-2 pointer-events-auto">
+            {!showPostModal && (
+  <div className="flex items-center gap-2 pointer-events-auto">
               <button
                 type="button"
                 onClick={() => {
@@ -391,6 +392,7 @@ export default function HomePage() {
                 {mode === 'all' ? 'All Modes' : mode === 'rent' ? 'For Rent' : 'For Buy'}
               </button>
             </div>
+)}
 
             <button
               type="button"
