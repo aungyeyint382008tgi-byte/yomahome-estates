@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, FormEvent } from 'react';
+import { prepareImageForUpload } from '../lib/prepareImage';
 import { supabase } from '@/lib/supabase';
 import type { Property } from '@/components/YomaMap';
 
@@ -72,7 +73,7 @@ export default function PostBoostModal({
     const filePath = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
     const { error: uploadErr } = await supabase.storage
       .from(bucket)
-      .upload(filePath, file, { cacheControl: '3600', upsert: false });
+      .upload(filePath, file, { cacheControl: '3600', upsert: false, contentType: file.type || 'image/jpeg' });
     if (uploadErr) throw uploadErr;
     const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
     return data.publicUrl;
@@ -92,7 +93,7 @@ export default function PostBoostModal({
       let imageUrl =
         'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=900&q=80';
       if (photoFile) {
-        imageUrl = await uploadToBucket(photoFile, 'listings');
+        imageUrl = await uploadToBucket(await prepareImageForUpload(photoFile), 'listings');
       }
 
       const [baseLat, baseLng] = TOWNSHIP_COORDS[township] || [16.822, 96.15];
@@ -146,7 +147,7 @@ export default function PostBoostModal({
 
     setSubmitting(true);
     try {
-      const receiptUrl = await uploadToBucket(receiptFile, 'payment-receipts');
+      const receiptUrl = await uploadToBucket(await prepareImageForUpload(receiptFile), 'payment-receipts');
 
       const { error: boostErr } = await supabase.from('boost_requests').insert({
         property_id: selectedPropId,
@@ -431,7 +432,7 @@ export default function PostBoostModal({
               </label>
               <input
                 type="file"
-                accept="image/*"
+                accept="image/*,.heic,.heif,.webp,.avif,.png,.jpg,.jpeg,.gif,.bmp"
                 onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
                 className="w-full text-[#C9C3B4] file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-[#D4AF37]/40 file:bg-[#1D1910] file:text-[#F3D58D] file:font-semibold"
               />
@@ -504,7 +505,7 @@ export default function PostBoostModal({
               <input
                 required
                 type="file"
-                accept="image/*"
+                accept="image/*,.heic,.heif,.webp,.avif,.png,.jpg,.jpeg,.gif,.bmp"
                 onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
                 className="w-full text-[#C9C3B4] file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-[#D4AF37]/40 file:bg-[#1D1910] file:text-[#F3D58D] file:font-semibold"
               />
