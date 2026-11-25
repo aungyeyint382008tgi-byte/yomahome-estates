@@ -79,7 +79,7 @@ function localFallbackParse(raw: string) {
   ];
   const property_type = types.find(([re]) => re.test(normalized))?.[1] || '';
 
-  const only_generator = /generator|power|24\/7|backup|မီးစက်|မီး/.test(normalized);
+  const only_generator = false;
   const only_owner = /owner|direct|no agent|ပိုင်ရှင်/.test(normalized);
   const flood_free = /flood/.test(normalized);
 

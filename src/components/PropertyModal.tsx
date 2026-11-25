@@ -252,12 +252,7 @@ export default function PropertyModal({
                 </p>
                 <p className="text-[11px] text-[#9A9589]">Sqft</p>
               </div>
-              <div className="rounded-2xl bg-[#141720] border border-white/10 p-3 text-center">
-                <p className="text-base font-semibold text-[#F5E6B3]">
-                  {property.backup_power ? '24/7' : 'Std'}
-                </p>
-                <p className="text-[11px] text-[#9A9589]">Power</p>
-              </div>
+
             </div>
 
             {/* Luxury Amenities */}
@@ -268,7 +263,7 @@ export default function PropertyModal({
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
                 <div
                   className={`px-3 py-2.5 rounded-xl border ${
-                    property.backup_power
+                    false
                       ? 'border-[#D4AF37]/40 bg-[#1B1810] text-[#F5E6B3]'
                       : 'border-white/5 bg-[#13161E] text-[#6E6A61]'
                   }`}

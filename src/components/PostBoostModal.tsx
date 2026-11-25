@@ -52,7 +52,9 @@ export default function PostBoostModal({
   const [baths, setBaths] = useState('2');
   const [sqft, setSqft] = useState('1200');
   const [floorLevel, setFloorLevel] = useState('');
-  const [backupPower, setBackupPower] = useState(true);
+  const [mapLink, setMapLink] = useState('');
+  const [resolvedCoords, setResolvedCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [resolvingMap, setResolvingMap] = useState(false);
   const [hasElevator, setHasElevator] = useState(true);
   const [ownerDirect, setOwnerDirect] = useState(false);
   const [floodFree, setFloodFree] = useState(true);
@@ -79,12 +81,32 @@ export default function PostBoostModal({
     return data.publicUrl;
   };
 
+  const resolveGoogleMapsLink = async (rawLink: string) => {
+    setResolvingMap(true);
+    try {
+      const res = await fetch('/api/resolve-map-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: rawLink }),
+      });
+      const data = await res.json();
+      if (!res.ok || typeof data.lat !== 'number' || typeof data.lng !== 'number') {
+        throw new Error(data.error || 'Could not extract exact location from this Google Maps link.');
+      }
+      const coords = { lat: data.lat, lng: data.lng };
+      setResolvedCoords(coords);
+      return coords;
+    } finally {
+      setResolvingMap(false);
+    }
+  };
+
   const handlePostSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccessMsg(null);
-    if (!title.trim() || !priceLakhs || !contactPhone.trim()) {
-      setError('Please fill in Property Title, Price (Lakhs), and Contact Phone.');
+    if (!title.trim() || !priceLakhs || !contactPhone.trim() || !mapLink.trim()) {
+      setError('Please fill in Property Title, Price (Lakhs), Contact Phone, and Google Maps Location Link.');
       return;
     }
 
@@ -96,9 +118,8 @@ export default function PostBoostModal({
         imageUrl = await uploadToBucket(await prepareImageForUpload(photoFile), 'listings');
       }
 
-      const [baseLat, baseLng] = TOWNSHIP_COORDS[township] || [16.822, 96.15];
-      const lat = baseLat + (Math.random() - 0.5) * 0.008;
-      const lng = baseLng + (Math.random() - 0.5) * 0.008;
+      const coords = resolvedCoords || (await resolveGoogleMapsLink(mapLink));
+      const { lat, lng } = coords;
 
       const { error: insertErr } = await supabase.from('properties').insert({
         title: title.trim(),
@@ -110,7 +131,7 @@ export default function PostBoostModal({
         baths: Number(baths) || 1,
         sqft: Number(sqft) || 1000,
         floor_level: floorLevel.trim() || null,
-        backup_power: backupPower,
+        backup_power: false,
         has_elevator: hasElevator,
         owner_direct: ownerDirect,
         flood_free: floodFree,
@@ -388,15 +409,7 @@ export default function PostBoostModal({
             </div>
 
             <div className="grid grid-cols-2 gap-2 pt-1 text-[#D8D2C5]">
-              <label className="flex items-center gap-2 bg-[#141720] border border-white/10 p-2.5 rounded-xl cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={backupPower}
-                  onChange={(e) => setBackupPower(e.target.checked)}
-                  className="accent-[#D4AF37]"
-                />
-                <span>24/7 Backup Power</span>
-              </label>
+              
               <label className="flex items-center gap-2 bg-[#141720] border border-white/10 p-2.5 rounded-xl cursor-pointer">
                 <input
                   type="checkbox"
@@ -427,6 +440,49 @@ export default function PostBoostModal({
             </div>
 
             <div>
+                <label className="block text-[11px] text-[#C9C3B4] mb-1">
+                  Google Maps Location Link *
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    required
+                    value={mapLink}
+                    onChange={(e) => {
+                      setMapLink(e.target.value);
+                      setResolvedCoords(null);
+                    }}
+                    placeholder="Paste Google Maps share link (maps.app.goo.gl/...)"
+                    className={inputCls}
+                  />
+                  <button
+                    type="button"
+                    disabled={resolvingMap || !mapLink.trim()}
+                    onClick={async () => {
+                      setError(null);
+                      try {
+                        await resolveGoogleMapsLink(mapLink);
+                      } catch (err: unknown) {
+                        setError(err instanceof Error ? err.message : 'Invalid Google Maps link.');
+                      }
+                    }}
+                    className="shrink-0 px-3 py-2 rounded-xl border border-[#D4AF37]/40 bg-[#1D1910] text-[11px] font-semibold text-[#F3D58D] hover:bg-[#D4AF37]/20 disabled:opacity-50 transition"
+                  >
+                    {resolvingMap ? 'Checking...' : 'Verify Pin'}
+                  </button>
+                </div>
+                {resolvedCoords ? (
+                  <p className="mt-1 text-[11px] text-emerald-400">
+                    ✓ Exact building pin locked ({resolvedCoords.lat.toFixed(5)}, {resolvedCoords.lng.toFixed(5)})
+                  </p>
+                ) : (
+                  <p className="mt-1 text-[10px] text-[#7E7A70]">
+                    Open Google Maps → tap the building → Share → Copy link
+                  </p>
+                )}
+              </div>
+
+              <div>
               <label className="block text-[#ABA599] mb-1">
                 Property Photo (Optional — defaults to sample photo)
               </label>

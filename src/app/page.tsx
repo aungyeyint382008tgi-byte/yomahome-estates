@@ -210,7 +210,7 @@ export default function HomePage() {
 
   const filtered = properties.filter((p) => {
     if (mode !== 'all' && p.mode !== mode) return false;
-    if (onlyGenerator && !p.backup_power) return false;
+    // 24/7 backup power filter removed
     if (onlyOwner && !p.owner_direct) return false;
     if (onlyElevator && !p.has_elevator) return false;
     if (onlyFloodFree && !p.flood_free) return false;
@@ -558,17 +558,7 @@ export default function HomePage() {
                     {m === 'all' ? 'All' : m === 'rent' ? 'For Rent' : 'For Buy'}
                   </button>
                 ))}
-                <button
-                  type="button"
-                  onClick={() => setOnlyGenerator((v) => !v)}
-                  className={`px-3.5 py-1.5 rounded-full text-xs font-medium border transition shrink-0 ${
-                    onlyGenerator
-                      ? 'border-[#D4AF37] bg-[#D4AF37]/15 text-[#F5E6B3]'
-                      : 'border-white/10 bg-[#141720] text-[#B7B1A4] hover:border-[#D4AF37]/40'
-                  }`}
-                >
-                  ⚡ 24/7 Power
-                </button>
+                
                 <button
                   type="button"
                   onClick={() => setOnlyOwner((v) => !v)}
@@ -770,7 +760,7 @@ export default function HomePage() {
                         <span>{p.baths} Baths</span>
                         <span className="text-[#D4AF37]/60">•</span>
                         <span>{Number(p.sqft).toLocaleString()} sqft</span>
-                        {p.backup_power && (
+                        {false && (
                           <>
                             <span className="text-[#D4AF37]/60">•</span>
                             <span className="text-[#F3D58D]">⚡ 24/7 Power</span>
