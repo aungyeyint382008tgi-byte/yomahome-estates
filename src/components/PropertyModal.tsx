@@ -1,25 +1,17 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import type { Property } from '@/components/YomaMap';
 
-type DetailedProperty = Property & { panorama_url?: string };
 
 export default function PropertyModal({
   property,
   onClose,
 }: {
-  property: DetailedProperty;
+  property: Property;
   onClose: () => void;
 }) {
-  const [tab, setTab] = useState<'photo' | 'tour360'>('photo');
 
-  // 360° Virtual Tour Pan & Auto-Rotate State
-  const [panX, setPanX] = useState(0);
-  const [zoom, setZoom] = useState(1.15);
-  const [autoRotate, setAutoRotate] = useState(true);
-  const draggingRef = useRef(false);
-  const lastXRef = useRef(0);
 
   // Rent Move-In Calculator State (Yangon standard 6 or 12 months upfront)
   const [leaseMonths, setLeaseMonths] = useState<6 | 12>(12);
@@ -38,20 +30,10 @@ export default function PropertyModal({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
 
-  useEffect(() => {
-    if (tab !== 'tour360' || !autoRotate) return;
-    const id = window.setInterval(() => {
-      if (!draggingRef.current) {
-        setPanX((prev) => (prev + 0.35) % 100);
-      }
-    }, 30);
-    return () => window.clearInterval(id);
-  }, [tab, autoRotate]);
 
   const heroImage =
     property.image_url ||
     'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80';
-  const panoImage = property.panorama_url || heroImage;
 
   const priceLakhs = Number(property.price_lakhs || 0);
   const cleanPhone = (property.contact_phone || '').replace(/\+/g, '');
@@ -73,23 +55,6 @@ export default function PropertyModal({
           (monthlyRate * Math.pow(1 + monthlyRate, totalPayments))) /
         (Math.pow(1 + monthlyRate, totalPayments) - 1);
 
-  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    draggingRef.current = true;
-    setAutoRotate(false);
-    lastXRef.current = e.clientX;
-    e.currentTarget.setPointerCapture(e.pointerId);
-  };
-
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!draggingRef.current) return;
-    const dx = e.clientX - lastXRef.current;
-    lastXRef.current = e.clientX;
-    setPanX((prev) => (prev - dx * 0.25 + 100) % 100);
-  };
-
-  const handlePointerUp = () => {
-    draggingRef.current = false;
-  };
 
   return (
     <div
@@ -102,58 +67,13 @@ export default function PropertyModal({
       >
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto">
-          {/* Edge-to-Edge Hero Photo / 360° Viewer */}
+          {/* Edge-to-Edge Hero Photo */}
           <div className="relative h-64 sm:h-80 w-full bg-[#090A0E] overflow-hidden select-none">
-            {tab === 'photo' ? (
-              <img
-                src={heroImage}
-                alt={property.title}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-                onPointerCancel={handlePointerUp}
-                className="w-full h-full cursor-grab active:cursor-grabbing relative overflow-hidden touch-none"
-                style={{
-                  backgroundImage: `url(${panoImage})`,
-                  backgroundRepeat: 'repeat-x',
-                  backgroundSize: `${zoom * 140}% 100%`,
-                  backgroundPosition: `${panX}% center`,
-                }}
-              >
-                <div className="absolute bottom-14 left-3 right-3 flex items-center justify-between gap-2 pointer-events-auto">
-                  <span className="luxury-glass px-3 py-1 rounded-full text-[11px] text-[#F5E6B3]">
-                    360° Drag to Explore
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setAutoRotate((v) => !v)}
-                      className="luxury-glass px-2.5 py-1 rounded-full text-[11px] text-[#F5EFE2]"
-                    >
-                      {autoRotate ? 'Pause Spin' : 'Auto Spin'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setZoom((z) => Math.max(1, Number((z - 0.15).toFixed(2))))}
-                      className="luxury-glass w-7 h-7 rounded-full text-xs text-[#F5EFE2]"
-                    >
-                      −
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setZoom((z) => Math.min(2, Number((z + 0.15).toFixed(2))))}
-                      className="luxury-glass w-7 h-7 rounded-full text-xs text-[#F5EFE2]"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
+            <img
+              src={heroImage}
+              alt={property.title}
+              className="w-full h-full object-cover"
+            />
 
             <div className="absolute inset-0 bg-gradient-to-t from-[#0D0F15] via-transparent to-black/45 pointer-events-none" />
 
@@ -168,30 +88,6 @@ export default function PropertyModal({
                 ←
               </button>
 
-              <div className="flex items-center gap-1.5 luxury-glass p-1 rounded-full">
-                <button
-                  type="button"
-                  onClick={() => setTab('photo')}
-                  className={`px-3 py-1 rounded-full text-xs font-semibold transition ${
-                    tab === 'photo'
-                      ? 'gold-gradient'
-                      : 'text-[#D6D0C4] hover:text-white'
-                  }`}
-                >
-                  Gallery
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTab('tour360')}
-                  className={`px-3 py-1 rounded-full text-xs font-semibold transition ${
-                    tab === 'tour360'
-                      ? 'gold-gradient'
-                      : 'text-[#D6D0C4] hover:text-white'
-                  }`}
-                >
-                  360° Tour
-                </button>
-              </div>
             </div>
 
             {/* Price Pill Overlay */}
